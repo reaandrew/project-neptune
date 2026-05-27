@@ -83,21 +83,15 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
 # -----------------------------------------------------------------------------
 # ECR — brand-worker image
 # -----------------------------------------------------------------------------
-resource "aws_ecr_repository" "brand_worker" {
-  name                 = "project-neptune-brand-worker"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Project = "project-neptune"
-  }
+# The repo is created by the CI workflow (so the image-push step has
+# somewhere to push to) before terraform runs. We look it up here and
+# attach a lifecycle policy.
+data "aws_ecr_repository" "brand_worker" {
+  name = "project-neptune-brand-worker"
 }
 
 resource "aws_ecr_lifecycle_policy" "brand_worker" {
-  repository = aws_ecr_repository.brand_worker.name
+  repository = data.aws_ecr_repository.brand_worker.name
 
   policy = jsonencode({
     rules = [{
@@ -411,7 +405,7 @@ resource "aws_lambda_permission" "brand_jobs_get_invoke" {
 # Outputs
 # -----------------------------------------------------------------------------
 output "ecr_brand_worker_repo_url" {
-  value = aws_ecr_repository.brand_worker.repository_url
+  value = data.aws_ecr_repository.brand_worker.repository_url
 }
 
 output "artifacts_bucket" {

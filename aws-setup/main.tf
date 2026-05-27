@@ -140,6 +140,7 @@ resource "aws_iam_role_policy" "site_deploy" {
         "s3:GetBucketLogging",
         "s3:GetBucketObjectLockConfiguration",
         "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration",
         "s3:GetReplicationConfiguration",
         "s3:GetAccelerateConfiguration",
         "s3:GetObject",
