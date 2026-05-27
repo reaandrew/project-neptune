@@ -31,6 +31,7 @@ jobs:
           - message-get
           - brand-jobs-create
           - brand-jobs-get
+          - brand-jobs-list
           - ads-create
           - ads-get
     steps:
@@ -206,7 +207,7 @@ jobs:
 
       - name: Place lambda binaries
         run: |
-          for lambda in api-authorizer message-get brand-jobs-create brand-jobs-get ads-create ads-get; do
+          for lambda in api-authorizer message-get brand-jobs-create brand-jobs-get brand-jobs-list ads-create ads-get; do
             cp "lambda-artifacts/lambda-${lambda}/bootstrap" "lambdas/${lambda}/bootstrap"
             chmod +x "lambdas/${lambda}/bootstrap"
           done

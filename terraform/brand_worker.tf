@@ -29,6 +29,24 @@ resource "aws_dynamodb_table" "brand_jobs" {
     name = "job_id"
     type = "S"
   }
+  attribute {
+    name = "url_normalised"
+    type = "S"
+  }
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
+  # Lookup the most-recent completed job for a given normalised URL so
+  # the creator can short-circuit a re-scan and reuse the cached
+  # artifacts.
+  global_secondary_index {
+    name            = "url-index"
+    hash_key        = "url_normalised"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
 
   ttl {
     attribute_name = "expires_at"
@@ -68,6 +86,9 @@ resource "aws_s3_bucket_public_access_block" "artifacts" {
 
 resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
   bucket = aws_s3_bucket.artifacts.id
+  # 90 days for brand-job artifacts: brand-create caches by URL and we
+  # want the PDF/YAML/JSON to still be there when a user revisits a
+  # months-old job. Ads expire faster — they're cheap to regenerate.
   rule {
     id     = "expire-brand-jobs"
     status = "Enabled"
@@ -75,7 +96,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
       prefix = "brand-jobs/"
     }
     expiration {
-      days = 7
+      days = 90
+    }
+  }
+  rule {
+    id     = "expire-ads"
+    status = "Enabled"
+    filter {
+      prefix = "ads/"
+    }
+    expiration {
+      days = 30
     }
   }
 }
@@ -213,8 +244,13 @@ resource "aws_iam_role_policy" "lambda_brand_jobs" {
           "dynamodb:PutItem",
           "dynamodb:GetItem",
           "dynamodb:UpdateItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
         ]
-        Resource = aws_dynamodb_table.brand_jobs.arn
+        Resource = [
+          aws_dynamodb_table.brand_jobs.arn,
+          "${aws_dynamodb_table.brand_jobs.arn}/index/*",
+        ]
       },
       {
         Effect   = "Allow"
@@ -325,11 +361,36 @@ resource "aws_lambda_function" "brand_jobs_get" {
   }
 }
 
+resource "aws_lambda_function" "brand_jobs_list" {
+  function_name    = "project-neptune-brand-jobs-list"
+  role             = aws_iam_role.lambda_exec.arn
+  runtime          = "provided.al2023"
+  handler          = "bootstrap"
+  architectures    = ["x86_64"]
+  filename         = data.archive_file.brand_lambda["brand-jobs-list"].output_path
+  source_code_hash = data.archive_file.brand_lambda["brand-jobs-list"].output_base64sha256
+  timeout          = 10
+  memory_size      = 128
+
+  environment {
+    variables = {
+      JOBS_TABLE = aws_dynamodb_table.brand_jobs.name
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.brand_lambda]
+
+  tags = {
+    Project = "project-neptune"
+  }
+}
+
 # Re-use the existing archive pattern: build a zip per Go lambda dir.
 locals {
   brand_lambda_dirs = {
     brand-jobs-create = "../lambdas/brand-jobs-create"
     brand-jobs-get    = "../lambdas/brand-jobs-get"
+    brand-jobs-list   = "../lambdas/brand-jobs-list"
   }
 }
 
@@ -399,6 +460,30 @@ resource "aws_lambda_permission" "brand_jobs_get_invoke" {
   function_name = aws_lambda_function.brand_jobs_get.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/GET/brand-jobs/*"
+}
+
+resource "aws_apigatewayv2_integration" "brand_jobs_list" {
+  api_id                 = aws_apigatewayv2_api.api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.brand_jobs_list.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "brand_jobs_list" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "GET /brand-jobs"
+  target             = "integrations/${aws_apigatewayv2_integration.brand_jobs_list.id}"
+  authorization_type = "CUSTOM"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "brand_jobs_list_invoke" {
+  statement_id  = "AllowAPIGatewayInvokeBrandJobsList"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.brand_jobs_list.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/GET/brand-jobs"
 }
 
 # -----------------------------------------------------------------------------

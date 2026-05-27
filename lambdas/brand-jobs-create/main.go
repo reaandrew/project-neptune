@@ -1,8 +1,13 @@
-// POST /brand-jobs {url}
+// POST /brand-jobs {url, force?}
 //
 // Creates a "pending" job row in DDB, fires an async Lambda invoke at
 // the brand-worker container function, and returns the job id. The
 // caller polls GET /brand-jobs/{id} for status + signed PDF URL.
+//
+// Caching: unless `force: true` is passed, we look up the most-recent
+// `done` job for the same normalised URL via the url-index GSI. If one
+// exists we return its jobId (HTTP 200 + cached:true) instead of
+// re-running the ~$3 pipeline.
 package main
 
 import (
@@ -28,11 +33,13 @@ import (
 )
 
 type requestBody struct {
-	URL string `json:"url"`
+	URL   string `json:"url"`
+	Force bool   `json:"force"`
 }
 
 type responseBody struct {
-	JobID string `json:"jobId"`
+	JobID  string `json:"jobId"`
+	Cached bool   `json:"cached,omitempty"`
 }
 
 func jsonResp(status int, body interface{}) events.APIGatewayV2HTTPResponse {
@@ -68,6 +75,53 @@ func isValidURL(raw string) bool {
 	return true
 }
 
+// normaliseURL collapses cosmetic differences so the cache hits even
+// when the user types "WWW.example.com" vs "example.com/".
+//
+// Rules: lowercase scheme + host, strip leading "www.", ensure a path
+// (so "/" and "" both become "/"), drop fragment + query.
+func normaliseURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Host)
+	host = strings.TrimPrefix(host, "www.")
+	path := u.Path
+	if path == "" {
+		path = "/"
+	}
+	return scheme + "://" + host + path
+}
+
+// findCachedJob returns the jobId of the most-recent `done` job for the
+// given normalised URL, or "" if none.
+func findCachedJob(ctx context.Context, ddb *dynamodb.Client, jobsTable, urlNorm string) string {
+	out, err := ddb.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(jobsTable),
+		IndexName:              aws.String("url-index"),
+		KeyConditionExpression: aws.String("url_normalised = :u"),
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":u": &ddbtypes.AttributeValueMemberS{Value: urlNorm},
+		},
+		ScanIndexForward: aws.Bool(false), // newest created_at first
+		Limit:            aws.Int32(10),
+	})
+	if err != nil {
+		log.Printf("cache lookup: %v", err)
+		return ""
+	}
+	for _, item := range out.Items {
+		status, _ := item["status"].(*ddbtypes.AttributeValueMemberS)
+		jobID, _ := item["job_id"].(*ddbtypes.AttributeValueMemberS)
+		if status != nil && status.Value == "done" && jobID != nil && jobID.Value != "" {
+			return jobID.Value
+		}
+	}
+	return ""
+}
+
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	jobsTable := os.Getenv("JOBS_TABLE")
 	workerFn := os.Getenv("WORKER_FUNCTION_NAME")
@@ -83,6 +137,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	if !isValidURL(target) {
 		return errResp(400, "url must be http(s)"), nil
 	}
+	urlNorm := normaliseURL(target)
 
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -92,10 +147,18 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	ddb := dynamodb.NewFromConfig(awsCfg)
 	lam := awslambda.NewFromConfig(awsCfg)
 
+	// Cache hit?
+	if !body.Force {
+		if cachedID := findCachedJob(ctx, ddb, jobsTable, urlNorm); cachedID != "" {
+			return jsonResp(200, responseBody{JobID: cachedID, Cached: true}), nil
+		}
+	}
+
 	jobID := newID()
 	now := time.Now().UTC().Format(time.RFC3339)
-	// TTL: drop the DDB row after 7 days. Matches the S3 lifecycle.
-	ttl := time.Now().Add(7 * 24 * time.Hour).Unix()
+	// TTL: drop the DDB row after 90 days. Matches the S3 lifecycle for
+	// brand-jobs/ artifacts.
+	ttl := time.Now().Add(90 * 24 * time.Hour).Unix()
 
 	subject := ""
 	if req.RequestContext.Authorizer != nil && req.RequestContext.Authorizer.Lambda != nil {
@@ -107,12 +170,13 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	_, err = ddb.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(jobsTable),
 		Item: map[string]ddbtypes.AttributeValue{
-			"job_id":     &ddbtypes.AttributeValueMemberS{Value: jobID},
-			"url":        &ddbtypes.AttributeValueMemberS{Value: target},
-			"status":     &ddbtypes.AttributeValueMemberS{Value: "pending"},
-			"created_at": &ddbtypes.AttributeValueMemberS{Value: now},
-			"subject":    &ddbtypes.AttributeValueMemberS{Value: subject},
-			"expires_at": &ddbtypes.AttributeValueMemberN{Value: fmt.Sprintf("%d", ttl)},
+			"job_id":         &ddbtypes.AttributeValueMemberS{Value: jobID},
+			"url":            &ddbtypes.AttributeValueMemberS{Value: target},
+			"url_normalised": &ddbtypes.AttributeValueMemberS{Value: urlNorm},
+			"status":         &ddbtypes.AttributeValueMemberS{Value: "pending"},
+			"created_at":     &ddbtypes.AttributeValueMemberS{Value: now},
+			"subject":        &ddbtypes.AttributeValueMemberS{Value: subject},
+			"expires_at":     &ddbtypes.AttributeValueMemberN{Value: fmt.Sprintf("%d", ttl)},
 		},
 	})
 	if err != nil {
@@ -128,7 +192,6 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	})
 	if err != nil {
 		log.Printf("invoke worker: %v", err)
-		// Mark the row so the poller surfaces the failure.
 		_, _ = ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 			TableName: aws.String(jobsTable),
 			Key:       map[string]ddbtypes.AttributeValue{"job_id": &ddbtypes.AttributeValueMemberS{Value: jobID}},

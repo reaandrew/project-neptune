@@ -57,16 +57,35 @@ export interface BrandJob {
   completedAt?: string;
 }
 
-export function createBrandJob(url: string): Promise<{ jobId: string }> {
-  return request<{ jobId: string }>('/brand-jobs', {
+export interface CreateBrandJobResponse {
+  jobId: string;
+  cached?: boolean;
+}
+
+export function createBrandJob(
+  url: string,
+  opts: { force?: boolean } = {},
+): Promise<CreateBrandJobResponse> {
+  return request<CreateBrandJobResponse>('/brand-jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, force: opts.force ?? false }),
   });
 }
 
 export function getBrandJob(jobId: string): Promise<BrandJob> {
   return request<BrandJob>(`/brand-jobs/${encodeURIComponent(jobId)}`);
+}
+
+export interface BrandJobSummary {
+  jobId: string;
+  url?: string;
+  status: BrandJobStatus;
+  createdAt?: string;
+}
+
+export function listBrandJobs(): Promise<{ jobs: BrandJobSummary[] }> {
+  return request<{ jobs: BrandJobSummary[] }>('/brand-jobs');
 }
 
 // ---- Ads ----
@@ -106,38 +125,6 @@ export function getAdJob(adId: string): Promise<AdJob> {
   return request<AdJob>(`/ads/${encodeURIComponent(adId)}`);
 }
 
-// ---- Recent jobs (client-side history via localStorage) ----
-
-const RECENT_BRAND_JOBS_KEY = 'pn:recentBrandJobs';
-
-export interface RecentBrandJobEntry {
-  jobId: string;
-  url: string;
-  createdAt: string;
-}
-
-export function rememberBrandJob(entry: RecentBrandJobEntry): void {
-  try {
-    const list = listRecentBrandJobs().filter((e) => e.jobId !== entry.jobId);
-    list.unshift(entry);
-    window.localStorage.setItem(
-      RECENT_BRAND_JOBS_KEY,
-      JSON.stringify(list.slice(0, 25)),
-    );
-  } catch {
-    /* localStorage unavailable */
-  }
-}
-
-export function listRecentBrandJobs(): RecentBrandJobEntry[] {
-  try {
-    const raw = window.localStorage.getItem(RECENT_BRAND_JOBS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as RecentBrandJobEntry[];
-  } catch {
-    return [];
-  }
-}
 
 export function redirectToLogin(): void {
   const returnTo = window.location.href;

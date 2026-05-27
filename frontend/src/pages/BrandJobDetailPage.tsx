@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
   AdJob,
   BrandJob,
   createAdJob,
+  createBrandJob,
   getAdJob,
   getBrandJob,
   redirectToLogin,
@@ -15,9 +16,28 @@ const POLL_MS = 5000;
 
 export function BrandJobDetailPage() {
   const { jobId = '' } = useParams();
+  const navigate = useNavigate();
   const [job, setJob] = useState<BrandJob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
   const timerRef = useRef<number | null>(null);
+
+  const onRegenerate = async () => {
+    if (!job?.url) return;
+    setRegenerating(true);
+    try {
+      const { jobId: newId } = await createBrandJob(job.url, { force: true });
+      navigate(`/brand/${newId}`);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        redirectToLogin();
+        return;
+      }
+      setError(String((err as Error).message ?? err));
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   useEffect(() => {
     if (!jobId) return;
@@ -86,6 +106,16 @@ export function BrandJobDetailPage() {
       {job?.status === 'done' && (
         <>
           <DownloadsCard job={job} />
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span>Regenerating costs ~$3 — only do this if the site has changed.</span>
+            <button
+              onClick={onRegenerate}
+              disabled={regenerating}
+              className="rounded-md border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/5 disabled:opacity-50"
+            >
+              {regenerating ? 'Starting…' : 'Regenerate'}
+            </button>
+          </div>
           <AdsSection brandJobId={jobId} />
         </>
       )}
