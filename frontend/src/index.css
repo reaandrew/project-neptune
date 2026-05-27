@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    min-height: 100%;
+  }
+  body {
+    background-image:
+      radial-gradient(1200px 600px at 20% -10%, rgba(14, 165, 233, 0.18) 0%, transparent 60%),
+      radial-gradient(900px 500px at 90% 10%, rgba(56, 189, 248, 0.12) 0%, transparent 60%);
+    background-color: #050912;
+    background-attachment: fixed;
+  }
+}

@@ -1,0 +1,78 @@
+// Site-edge auth gate.
+//
+// Runs as a CloudFront Function (viewer-request) on the
+// projectneptune.andrewreaassociates.com distribution. Validates the
+// auth_token cookie cryptographically. If the JWT is missing,
+// malformed, expired, or doesn't HMAC-verify against the shared ara
+// signing secret, the request is short-circuited with a 302 to ara's
+// passkey login page, with ?returnTo set to the originally requested
+// URL.
+//
+// Nothing — not even the HTML shell — is served from S3 unless the
+// caller already holds a valid session cookie.
+//
+// The signing key is templated in at terraform-apply time from SSM
+// (/ara/jwt-signing-key). Rotation = terraform apply.
+
+import crypto from 'crypto';
+
+var SIGNING_KEY = '${signing_key}';
+var LOGIN_URL = 'https://andrewreaassociates.com/admin.html';
+
+function redirect(request) {
+    var host = request.headers['host'] ? request.headers['host'].value : 'projectneptune.andrewreaassociates.com';
+    var url = 'https://' + host + request.uri;
+    var loc = LOGIN_URL + '?returnTo=' + encodeURIComponent(url);
+    return {
+        statusCode: 302,
+        statusDescription: 'Found',
+        headers: {
+            location: { value: loc },
+            'cache-control': { value: 'no-store' },
+        },
+    };
+}
+
+function decodePayload(b64url) {
+    // CloudFront Functions runtime 2.0 supports digest('base64url') but
+    // not a direct base64url decoder; convert to standard base64 first.
+    var pad = b64url.length % 4;
+    var padded = b64url;
+    if (pad === 2) padded += '==';
+    else if (pad === 3) padded += '=';
+    else if (pad !== 0) return null;
+    try {
+        var buf = Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+        return JSON.parse(buf.toString('utf-8'));
+    } catch (e) {
+        return null;
+    }
+}
+
+function handler(event) {
+    var request = event.request;
+    var cookies = request.cookies || {};
+    var tok = cookies.auth_token && cookies.auth_token.value;
+    if (!tok) return redirect(request);
+
+    var parts = tok.split('.');
+    if (parts.length !== 3) return redirect(request);
+
+    // 1. Signature.
+    try {
+        var expected = crypto
+            .createHmac('sha256', SIGNING_KEY)
+            .update(parts[0] + '.' + parts[1])
+            .digest('base64url');
+        if (expected !== parts[2]) return redirect(request);
+    } catch (e) {
+        return redirect(request);
+    }
+
+    // 2. Expiry.
+    var payload = decodePayload(parts[1]);
+    if (!payload || typeof payload.exp !== 'number') return redirect(request);
+    if (payload.exp < Math.floor(Date.now() / 1000)) return redirect(request);
+
+    return request;
+}
