@@ -479,6 +479,59 @@ def typography_page(c: canvas.Canvas, brand_name: str, typography: dict, page_nu
     c.showPage()
 
 
+def _image_luminance_profile(data: bytes) -> tuple[float, float]:
+    """Return (mean_luma, white_pixel_fraction) of the OPAQUE pixels of an
+    image, both on a 0..255 / 0..1 scale. Used to decide what tile colour
+    a logo or favicon should sit on so it doesn't disappear into the page.
+
+    Skips transparent pixels (alpha < 32) — a logo with a white wordmark
+    on a transparent background should be treated as "white", not "the
+    average of nothing".
+    """
+    try:
+        from PIL import Image
+        with Image.open(io.BytesIO(data)) as im:
+            im = im.convert("RGBA")
+            # Sample a fixed thumbnail — full-size logos can be 1000x1000+
+            # and we don't need pixel accuracy for this heuristic.
+            im.thumbnail((128, 128))
+            pixels = list(im.getdata())
+    except Exception:
+        return (255.0, 1.0)  # treat unreadable as "white" -> dark tile
+
+    opaque = [(r, g, b) for (r, g, b, a) in pixels if a >= 32]
+    if not opaque:
+        return (255.0, 1.0)
+    total = 0.0
+    near_white = 0
+    for r, g, b in opaque:
+        luma = 0.299 * r + 0.587 * g + 0.114 * b
+        total += luma
+        if luma >= 240:
+            near_white += 1
+    mean = total / len(opaque)
+    frac = near_white / len(opaque)
+    return mean, frac
+
+
+def _is_light_artwork(data: bytes) -> bool:
+    """True if the image is predominantly white/very light — i.e. a logo
+    designed for a dark backdrop. Such artwork is invisible on the
+    default white PDF page and needs a contrasting tile."""
+    mean, frac_white = _image_luminance_profile(data)
+    # Either the average opaque pixel is very light, or more than half
+    # the opaque pixels are essentially white.
+    return mean >= 220 or frac_white >= 0.5
+
+
+def _pick_contrasting_bg(data: bytes | None, dark_hex: str) -> str:
+    """White by default. If the artwork would vanish on white, swap to a
+    dark backdrop (the brand primary, or a neutral dark if no primary)."""
+    if not data:
+        return "#FFFFFF"
+    return dark_hex if _is_light_artwork(data) else "#FFFFFF"
+
+
 def _draw_logo_in_tile(
     c: canvas.Canvas,
     data: bytes | None,
@@ -545,23 +598,56 @@ def logos_pages(
 
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    tile_w = PAGE_W - 2 * MARGIN
-    # Fit comfortably on the page after section title + footer
-    tile_h = min(380, y - MARGIN - 60)
     url = candidates[0]
     data = fetch_image(url)
-    _draw_logo_in_tile(c, data, url, MARGIN, y, tile_w, tile_h, "#FFFFFF", border=True)
 
-    # Filename below the tile
-    basename = url.rsplit("/", 1)[-1] or url
-    while basename and stringWidth(basename, BODY_FONT, 8) > tile_w:
-        basename = basename[:-1]
-        if basename and stringWidth(basename + "…", BODY_FONT, 8) <= tile_w:
-            basename += "…"
-            break
+    # Brand-guidelines convention: every primary mark is shown on both
+    # light and dark backdrops so designers can see legibility on each.
+    # If the artwork is itself light (white logo) we'd otherwise render
+    # an invisible tile on white — flip the layout so the dark tile is
+    # prominent and the light tile is the smaller secondary swatch.
+    dark_hex = primary_color if primary_color and primary_color.upper() != "#FFFFFF" else "#111111"
+    light_is_dominant = data is not None and _is_light_artwork(data)
+
+    full_w = PAGE_W - 2 * MARGIN
+    primary_h = min(300, y - MARGIN - 90)
+    if light_is_dominant:
+        # Dark backdrop primary; small white companion below.
+        _draw_logo_in_tile(c, data, url, MARGIN, y, full_w, primary_h, dark_hex, border=False)
+        primary_label = f"On brand colour ({dark_hex})"
+        secondary_bg = "#FFFFFF"
+        secondary_label = "On white (mark may appear faint)"
+    else:
+        _draw_logo_in_tile(c, data, url, MARGIN, y, full_w, primary_h, "#FFFFFF", border=True)
+        primary_label = "On white"
+        secondary_bg = dark_hex
+        secondary_label = f"On brand colour ({dark_hex})"
+
     c.setFillColor(HexColor("#666666"))
     c.setFont(BODY_FONT, 8)
-    c.drawString(MARGIN, y - tile_h - 14, basename)
+    c.drawString(MARGIN, y - primary_h - 12, primary_label)
+
+    # Smaller companion tile underneath.
+    companion_h = 90
+    companion_y = y - primary_h - 28
+    _draw_logo_in_tile(
+        c, data, url, MARGIN, companion_y, full_w, companion_h, secondary_bg,
+        border=(secondary_bg == "#FFFFFF"),
+    )
+    c.setFillColor(HexColor("#666666"))
+    c.setFont(BODY_FONT, 8)
+    c.drawString(MARGIN, companion_y - companion_h - 12, secondary_label)
+
+    # Filename anchored to the bottom of the section.
+    basename = url.rsplit("/", 1)[-1] or url
+    while basename and stringWidth(basename, BODY_FONT, 8) > full_w:
+        basename = basename[:-1]
+        if basename and stringWidth(basename + "…", BODY_FONT, 8) <= full_w:
+            basename += "…"
+            break
+    c.setFillColor(HexColor("#999999"))
+    c.setFont(BODY_FONT, 7)
+    c.drawRightString(MARGIN + full_w, companion_y - companion_h - 12, basename)
 
     c.showPage()
     return page + 1
@@ -804,16 +890,25 @@ def supporting_marks_page(
     cols = 3
     cell_w = (PAGE_W - 2 * MARGIN - GUTTER * (cols - 1)) / cols
     cell_h = 200
+    # Neutral dark backdrop for any asset that would vanish on white.
+    # Supporting marks come from many sources and rarely match the brand
+    # colour, so a neutral charcoal reads cleaner than the primary.
+    dark_hex = "#111111"
     for i, im in enumerate(supporting[:6]):
         row, col = divmod(i, cols)
         x = MARGIN + col * (cell_w + GUTTER)
         cy = y - row * (cell_h + 40)
-        # White background with a faint border so the cell shape is visible
-        # without giving the asset a grey backing it wasn't designed for.
-        c.setStrokeColor(HexColor("#E0E0E0"))
-        c.setLineWidth(0.5)
-        c.rect(x, cy - cell_h, cell_w, cell_h, fill=0, stroke=1)
         data = fetch_image(im.get("url") or "")
+        # Per-cell backdrop: white for normal artwork, brand colour for
+        # marks that would otherwise vanish on a white page.
+        bg_hex = _pick_contrasting_bg(data, dark_hex)
+        on_white = bg_hex == "#FFFFFF"
+        c.setFillColor(HexColor(bg_hex))
+        c.rect(x, cy - cell_h, cell_w, cell_h, fill=1, stroke=0)
+        if on_white:
+            c.setStrokeColor(HexColor("#E0E0E0"))
+            c.setLineWidth(0.5)
+            c.rect(x, cy - cell_h, cell_w, cell_h, fill=0, stroke=1)
         if data:
             try:
                 img = ImageReader(io.BytesIO(data))
@@ -978,15 +1073,25 @@ def favicon_page(c: canvas.Canvas, brand_name: str, brand: dict, page_num: int) 
         return
 
     from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    primary_color = (brand.get("primary_color") or "#111111")
+    dark_hex = primary_color if primary_color.upper() != "#FFFFFF" else "#111111"
+
     box = 96
     x = MARGIN
     for url in favs[:4]:
         data = fetch_image(url)
-        # Faint border instead of a grey backing — favicons are tiny artworks
-        # the brand controls, no need to obscure them with a neutral tile.
-        c.setStrokeColor(HexColor("#E0E0E0"))
-        c.setLineWidth(0.5)
-        c.rect(x, y - box, box, box, fill=0, stroke=1)
+        # Per-icon backdrop: if the favicon is light-on-transparent it would
+        # vanish on white, so swap the tile to the brand colour. Otherwise
+        # keep white with a faint border.
+        bg_hex = _pick_contrasting_bg(data, dark_hex)
+        on_white = bg_hex == "#FFFFFF"
+        c.setFillColor(HexColor(bg_hex))
+        c.rect(x, y - box, box, box, fill=1, stroke=0)
+        if on_white:
+            c.setStrokeColor(HexColor("#E0E0E0"))
+            c.setLineWidth(0.5)
+            c.rect(x, y - box, box, box, fill=0, stroke=1)
         if data:
             try:
                 img = ImageReader(io.BytesIO(data))
