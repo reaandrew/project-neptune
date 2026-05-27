@@ -1,0 +1,9 @@
+awslambdaric
+boto3
+requests
+beautifulsoup4
+PyYAML
+trafilatura
+reportlab
+pypdf
+playwright

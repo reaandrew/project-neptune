@@ -11,6 +11,10 @@ export function App() {
             </span>
             <span className="text-lg font-semibold tracking-tight">project-neptune</span>
           </NavLink>
+          <nav className="flex items-center gap-2 text-sm">
+            <NavTab to="/" label="Welcome" />
+            <NavTab to="/brand" label="Brand guidelines" />
+          </nav>
         </div>
       </header>
 
@@ -31,5 +35,17 @@ export function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function NavTab({ to, label }: { to: string; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      end
+      className="px-3 py-1.5 rounded-md transition text-slate-400 hover:text-slate-100 data-[active=true]:text-white data-[active=true]:bg-white/10"
+    >
+      {({ isActive }) => <span data-active={isActive}>{label}</span>}
+    </NavLink>
   );
 }

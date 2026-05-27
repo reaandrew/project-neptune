@@ -41,6 +41,32 @@ export function getMessage(): Promise<MessageResponse> {
   return request<MessageResponse>('/message');
 }
 
+// ---- Brand-guidelines jobs ----
+
+export type BrandJobStatus = 'pending' | 'running' | 'done' | 'error';
+
+export interface BrandJob {
+  jobId: string;
+  status: BrandJobStatus;
+  url?: string;
+  pdfUrl?: string;
+  error?: string;
+  createdAt?: string;
+  completedAt?: string;
+}
+
+export function createBrandJob(url: string): Promise<{ jobId: string }> {
+  return request<{ jobId: string }>('/brand-jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function getBrandJob(jobId: string): Promise<BrandJob> {
+  return request<BrandJob>(`/brand-jobs/${encodeURIComponent(jobId)}`);
+}
+
 export function redirectToLogin(): void {
   const returnTo = window.location.href;
   const url = new URL(AUTH_LOGIN_URL);

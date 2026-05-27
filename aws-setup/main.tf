@@ -153,7 +153,72 @@ resource "aws_iam_role_policy" "site_deploy" {
       Resource = [
         "arn:aws:s3:::project-neptune-site-${data.aws_caller_identity.current.account_id}",
         "arn:aws:s3:::project-neptune-site-${data.aws_caller_identity.current.account_id}/*",
+        "arn:aws:s3:::project-neptune-artifacts-${data.aws_caller_identity.current.account_id}",
+        "arn:aws:s3:::project-neptune-artifacts-${data.aws_caller_identity.current.account_id}/*",
       ]
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecr" {
+  name = "ecr"
+  role = aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Token for `docker login` — must be allowed on "*".
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:CreateRepository",
+          "ecr:DeleteRepository",
+          "ecr:DescribeRepositories",
+          "ecr:ListImages",
+          "ecr:DescribeImages",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "ecr:ListTagsForResource",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:PutImageScanningConfiguration",
+          "ecr:PutImageTagMutability",
+          "ecr:GetRepositoryPolicy",
+          "ecr:SetRepositoryPolicy",
+          "ecr:DeleteRepositoryPolicy",
+          "ecr:GetLifecyclePolicy",
+          "ecr:PutLifecyclePolicy",
+          "ecr:DeleteLifecyclePolicy",
+          "ecr:GetLifecyclePolicyPreview",
+          "ecr:StartLifecyclePolicyPreview",
+          "ecr:DescribeImageScanFindings",
+        ]
+        Resource = "arn:aws:ecr:*:${data.aws_caller_identity.current.account_id}:repository/project-neptune-*"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "dynamodb" {
+  name = "dynamodb"
+  role = aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:*"]
+      Resource = "arn:aws:dynamodb:*:${data.aws_caller_identity.current.account_id}:table/project-neptune-*"
     }]
   })
 }
