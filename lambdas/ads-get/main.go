@@ -1,7 +1,5 @@
-// GET /brand-jobs/{id}
-//
-// Returns job status. If the job is `done` a 5-minute presigned S3 URL
-// for the rendered PDF is included.
+// GET /ads/{id}
+// Returns ad-job status + presigned PNG URL when done.
 package main
 
 import (
@@ -21,13 +19,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-type jobResponse struct {
-	JobID       string `json:"jobId"`
+type adResponse struct {
+	AdID        string `json:"adId"`
+	BrandJobID  string `json:"brandJobId,omitempty"`
 	Status      string `json:"status"`
-	URL         string `json:"url,omitempty"`
-	PDFURL      string `json:"pdfUrl,omitempty"`
-	YAMLURL     string `json:"yamlUrl,omitempty"`
-	JSONURL     string `json:"jsonUrl,omitempty"`
+	Headline    string `json:"headline,omitempty"`
+	Body        string `json:"body,omitempty"`
+	CTA         string `json:"cta,omitempty"`
+	ImageURL    string `json:"imageUrl,omitempty"`
 	Error       string `json:"error,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`
 	CompletedAt string `json:"completedAt,omitempty"`
@@ -59,15 +58,14 @@ func sval(m map[string]ddbtypes.AttributeValue, k string) string {
 }
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	jobsTable := os.Getenv("JOBS_TABLE")
+	jobsTable := os.Getenv("ADS_JOBS_TABLE")
 	artifactsBucket := os.Getenv("ARTIFACTS_BUCKET")
 	if jobsTable == "" || artifactsBucket == "" {
 		return errResp(500, "service misconfigured"), nil
 	}
-
-	jobID := strings.TrimSpace(req.PathParameters["id"])
-	if jobID == "" {
-		return errResp(400, "missing job id"), nil
+	adID := strings.TrimSpace(req.PathParameters["id"])
+	if adID == "" {
+		return errResp(400, "missing ad id"), nil
 	}
 
 	awsCfg, err := config.LoadDefaultConfig(ctx)
@@ -80,7 +78,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(jobsTable),
 		Key: map[string]ddbtypes.AttributeValue{
-			"job_id": &ddbtypes.AttributeValueMemberS{Value: jobID},
+			"ad_id": &ddbtypes.AttributeValueMemberS{Value: adID},
 		},
 	})
 	if err != nil {
@@ -91,39 +89,34 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return errResp(404, "not found"), nil
 	}
 
-	resp := jobResponse{
-		JobID:       jobID,
+	resp := adResponse{
+		AdID:        adID,
+		BrandJobID:  sval(out.Item, "brand_job_id"),
 		Status:      sval(out.Item, "status"),
-		URL:         sval(out.Item, "url"),
+		Headline:    sval(out.Item, "headline"),
+		Body:        sval(out.Item, "body"),
+		CTA:         sval(out.Item, "cta"),
 		Error:       sval(out.Item, "error"),
 		CreatedAt:   sval(out.Item, "created_at"),
 		CompletedAt: sval(out.Item, "completed_at"),
 	}
 
 	if resp.Status == "done" {
+		key := sval(out.Item, "image_key")
+		if key == "" {
+			key = "ads/" + adID + ".png"
+		}
 		s3Client := s3.NewFromConfig(awsCfg)
 		presigner := s3.NewPresignClient(s3Client)
-		sign := func(key string) string {
-			if key == "" {
-				return ""
-			}
-			r, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
-				Bucket: aws.String(artifactsBucket),
-				Key:    aws.String(key),
-			}, s3.WithPresignExpires(15*time.Minute))
-			if err != nil {
-				log.Printf("presign %s: %v", key, err)
-				return ""
-			}
-			return r.URL
+		r, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(artifactsBucket),
+			Key:    aws.String(key),
+		}, s3.WithPresignExpires(15*time.Minute))
+		if err != nil {
+			log.Printf("presign: %v", err)
+			return errResp(500, "could not sign image url"), nil
 		}
-		pdfKey := sval(out.Item, "pdf_key")
-		if pdfKey == "" {
-			pdfKey = "brand-jobs/" + jobID + ".pdf"
-		}
-		resp.PDFURL = sign(pdfKey)
-		resp.YAMLURL = sign(sval(out.Item, "yaml_key"))
-		resp.JSONURL = sign(sval(out.Item, "json_key"))
+		resp.ImageURL = r.URL
 	}
 
 	return jsonResp(200, resp), nil

@@ -1,0 +1,4 @@
+awslambdaric
+boto3
+openai>=1.55.0
+PyYAML

@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './index.css';
 import { App } from './App';
 import { BrandGuidelinesPage } from './pages/BrandGuidelinesPage';
+import { BrandJobDetailPage } from './pages/BrandJobDetailPage';
 import { WelcomePage } from './pages/WelcomePage';
 
 createRoot(document.getElementById('root')!).render(
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<App />}>
           <Route index element={<WelcomePage />} />
           <Route path="brand" element={<BrandGuidelinesPage />} />
+          <Route path="brand/:jobId" element={<BrandJobDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

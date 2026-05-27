@@ -10,6 +10,7 @@ row with status = done | error.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -17,6 +18,7 @@ import traceback
 from pathlib import Path
 
 import boto3
+import yaml
 
 ARTIFACTS_BUCKET = os.environ["ARTIFACTS_BUCKET"]
 JOBS_TABLE = os.environ["JOBS_TABLE"]
@@ -56,6 +58,7 @@ def handler(event, _context):
     workdir = Path(f"/tmp/{job_id}")
     workdir.mkdir(parents=True, exist_ok=True)
     pdf_path = workdir / "brand_guidelines.pdf"
+    yaml_path = workdir / "brand.yaml"
     screenshot_dir = workdir / "screenshots"
     screenshot_dir.mkdir(exist_ok=True)
 
@@ -64,10 +67,13 @@ def handler(event, _context):
 
     # Drive the existing CLI by setting sys.argv. The toolkit was
     # written as a script first; calling main() is the supported entry.
+    # --save-yaml persists the intermediate brand dict so we can also
+    # serve it as a structured artifact alongside the PDF.
     sys.argv = [
         "build_brand_guidelines.py",
         url,
         "-o", str(pdf_path),
+        "--save-yaml", str(yaml_path),
         "--screenshot-dir", str(screenshot_dir),
         "--bedrock-region", BEDROCK_REGION,
     ]
@@ -91,19 +97,44 @@ def handler(event, _context):
         _set_status(job_id, "error", error="pdf not produced")
         raise RuntimeError("pdf not produced")
 
-    s3_key = f"brand-jobs/{job_id}.pdf"
+    pdf_key = f"brand-jobs/{job_id}.pdf"
     _s3.put_object(
         Bucket=ARTIFACTS_BUCKET,
-        Key=s3_key,
+        Key=pdf_key,
         Body=pdf_path.read_bytes(),
         ContentType="application/pdf",
     )
 
-    completed_at = str(int(time.time()))
-    _set_status(
-        job_id, "done",
-        pdf_key=s3_key,
-        completed_at=completed_at,
-    )
+    yaml_key = None
+    json_key = None
+    if yaml_path.exists():
+        yaml_bytes = yaml_path.read_bytes()
+        yaml_key = f"brand-jobs/{job_id}.yaml"
+        _s3.put_object(
+            Bucket=ARTIFACTS_BUCKET,
+            Key=yaml_key,
+            Body=yaml_bytes,
+            ContentType="application/yaml",
+        )
+        try:
+            brand_dict = yaml.safe_load(yaml_bytes.decode("utf-8"))
+            json_bytes = json.dumps(brand_dict, indent=2, ensure_ascii=False).encode("utf-8")
+            json_key = f"brand-jobs/{job_id}.json"
+            _s3.put_object(
+                Bucket=ARTIFACTS_BUCKET,
+                Key=json_key,
+                Body=json_bytes,
+                ContentType="application/json",
+            )
+        except Exception as e:
+            print(f"  ! failed to convert yaml -> json ({e})", file=sys.stderr)
 
-    return {"jobId": job_id, "pdfKey": s3_key}
+    completed_at = str(int(time.time()))
+    extras = {"pdf_key": pdf_key, "completed_at": completed_at}
+    if yaml_key:
+        extras["yaml_key"] = yaml_key
+    if json_key:
+        extras["json_key"] = json_key
+    _set_status(job_id, "done", **extras)
+
+    return {"jobId": job_id, "pdfKey": pdf_key, "yamlKey": yaml_key, "jsonKey": json_key}
