@@ -139,11 +139,11 @@ function JobCard({
   onReset: () => void;
 }) {
   const status = job?.status ?? 'pending';
-  const label =
+  const shortLabel =
     status === 'pending'
       ? 'Queued'
       : status === 'running'
-        ? 'Generating (crawl + screenshots + Bedrock vision + PDF — up to ~5 min)'
+        ? 'Generating…'
         : status === 'done'
           ? 'Ready'
           : 'Failed';
@@ -155,18 +155,35 @@ function JobCard({
         ? 'text-rose-300 border-rose-500/30 bg-rose-500/5'
         : 'text-slate-200 border-white/10 bg-ink-800/60';
 
+  const pillBg =
+    status === 'done'
+      ? 'bg-emerald-500/15'
+      : status === 'error'
+        ? 'bg-rose-500/15'
+        : 'bg-white/10';
+
   return (
     <div className={`rounded-xl border p-5 ${accent}`}>
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div className="text-xs uppercase tracking-wide text-slate-500">Job</div>
-          <div className="font-mono text-sm">{jobId}</div>
+          <div className="font-mono text-xs sm:text-sm break-all">{jobId}</div>
         </div>
-        <div className="text-sm font-medium">{label}</div>
+        <span
+          className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${pillBg}`}
+        >
+          {shortLabel}
+        </span>
       </div>
 
+      {status === 'running' && (
+        <div className="mt-3 text-xs text-slate-400">
+          Crawling, screenshotting, Bedrock vision passes, PDF render — up to ~5 min.
+        </div>
+      )}
+
       {job?.url && (
-        <div className="mt-3 text-xs text-slate-400 truncate">{job.url}</div>
+        <div className="mt-3 text-xs text-slate-400 break-all">{job.url}</div>
       )}
 
       {status === 'done' && job?.pdfUrl && (
