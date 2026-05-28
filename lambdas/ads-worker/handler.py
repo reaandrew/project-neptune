@@ -49,7 +49,7 @@ ADS_JOBS_TABLE = os.environ["ADS_JOBS_TABLE"]
 OPENAI_API_KEY_PARAM = os.environ.get(
     "OPENAI_API_KEY_PARAM", "/project-neptune/openai-api-key"
 )
-TEXT_MODEL = os.environ.get("OPENAI_TEXT_MODEL", "gpt-4o")
+TEXT_MODEL = os.environ.get("OPENAI_TEXT_MODEL", "gpt-5")
 IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 IMAGE_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
 IMAGE_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "high")

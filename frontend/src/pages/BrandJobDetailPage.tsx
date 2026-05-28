@@ -273,7 +273,7 @@ function AdsSection({ brandJobId }: { brandJobId: string }) {
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Generate Facebook ad</h2>
         <p className="mt-1 text-sm text-slate-400">
-          GPT-4o reads your brand guidelines PDF and drafts the image
+          GPT-5 reads your brand guidelines PDF and drafts the image
           prompt; gpt-image-1 renders the final 1024×1024 advert with your
           official logo as a reference image.{' '}
           <strong className="text-slate-300">
@@ -309,7 +309,7 @@ function AdsSection({ brandJobId }: { brandJobId: string }) {
           placeholder="https://… (publicly accessible image)"
           value={sampleAdUrl}
           onChange={setSampleAdUrl}
-          hint="GPT-4o uses this as a layout style cue."
+          hint="GPT-5 uses this as a layout style cue."
         />
         <button
           type="submit"
@@ -392,7 +392,7 @@ function AdResultCard({ ad }: { ad: AdJob }) {
 
       {ad.status === 'running' && (
         <div className="mt-3 text-sm text-slate-400">
-          GPT-4o drafting prompt → gpt-image-1 rendering — about 30-90 seconds.
+          GPT-5 drafting prompt → gpt-image-1 rendering — about 30-90 seconds.
         </div>
       )}
 
