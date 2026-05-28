@@ -273,28 +273,34 @@ function AdsSection({ brandJobId }: { brandJobId: string }) {
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Generate Facebook ad</h2>
         <p className="mt-1 text-sm text-slate-400">
-          Uses your brand guidelines as the sole brand reference. GPT-4o drafts the
-          image prompt; gpt-image-1 renders the final 1024×1024 advert.
+          GPT-4o reads your brand guidelines PDF and drafts the image
+          prompt; gpt-image-1 renders the final 1024×1024 advert with your
+          official logo as a reference image.{' '}
+          <strong className="text-slate-300">
+            Every field below is optional
+          </strong>{' '}
+          — leave them blank and we'll write the copy from your brand
+          mission, services, and tone.
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-3">
         <Field
-          label="Headline"
-          placeholder="Skip Hire Made Simple"
+          label="Headline (optional)"
+          placeholder="Leave blank to auto-generate"
           value={headline}
           onChange={setHeadline}
         />
         <Field
-          label="Supporting copy"
-          placeholder="Fast, reliable skip hire across St Helens, Liverpool & Manchester"
+          label="Supporting copy (optional)"
+          placeholder="Leave blank to auto-generate"
           value={body}
           onChange={setBody}
           multiline
         />
         <Field
-          label="Call to action"
-          placeholder="Get Your Free Quote Today"
+          label="Call to action (optional)"
+          placeholder="Leave blank to auto-generate"
           value={cta}
           onChange={setCta}
         />
@@ -303,7 +309,7 @@ function AdsSection({ brandJobId }: { brandJobId: string }) {
           placeholder="https://… (publicly accessible image)"
           value={sampleAdUrl}
           onChange={setSampleAdUrl}
-          hint="If provided, GPT-4o looks at this image as a style cue."
+          hint="GPT-4o uses this as a layout style cue."
         />
         <button
           type="submit"
@@ -397,6 +403,31 @@ function AdResultCard({ ad }: { ad: AdJob }) {
             alt="Generated advert"
             className="w-full rounded-lg border border-white/5"
           />
+          {(ad.headline || ad.body || ad.cta) && (
+            <div className="space-y-2 rounded-md border border-white/5 bg-ink-900/50 p-3 text-sm">
+              <div className="text-xs uppercase tracking-wide text-slate-500">
+                Copy used
+              </div>
+              {ad.headline && (
+                <div>
+                  <span className="text-slate-500 text-xs">Headline · </span>
+                  <span className="text-slate-200">{ad.headline}</span>
+                </div>
+              )}
+              {ad.body && (
+                <div>
+                  <span className="text-slate-500 text-xs">Body · </span>
+                  <span className="text-slate-300">{ad.body}</span>
+                </div>
+              )}
+              {ad.cta && (
+                <div>
+                  <span className="text-slate-500 text-xs">CTA · </span>
+                  <span className="text-slate-200">{ad.cta}</span>
+                </div>
+              )}
+            </div>
+          )}
           <a
             href={ad.imageUrl}
             target="_blank"
