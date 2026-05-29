@@ -33,12 +33,19 @@ export function BrandsListPage() {
 
   return (
     <div className="space-y-10">
-      <div className="flex items-end justify-between gap-6 flex-wrap">
+      <div className="flex items-end justify-between gap-6 flex-wrap border-b border-white/5 pb-8">
         <div>
-          <div className="label">Studio</div>
-          <h1 className="font-display text-5xl md:text-6xl tracking-tightest text-ink-900 mt-2">
-            Your brands.
+          <div className="label flex items-center gap-3">
+            <span className="accent-rule" />
+            Studio
+          </div>
+          <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-slate-100">
+            Your <span className="text-brand">brands.</span>
           </h1>
+          <p className="mt-3 text-sm text-slate-400 max-w-md">
+            Every brand you've onboarded — guidelines, structured data, and
+            generated ads in one place.
+          </p>
         </div>
         <Link to="/brands/new" className="btn-primary">
           Register a brand
@@ -46,21 +53,21 @@ export function BrandsListPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-300/60 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-300">
           {error}
         </div>
       )}
 
       {jobs === null && !error && (
-        <div className="text-sm text-ink-500">Loading…</div>
+        <div className="text-sm text-slate-500">Loading…</div>
       )}
 
       {jobs?.length === 0 && (
         <div className="panel p-12 text-center space-y-4">
-          <div className="font-display text-3xl text-ink-900 tracking-tightest">
+          <div className="text-2xl text-slate-100 font-semibold tracking-tight">
             No brands yet.
           </div>
-          <p className="text-sm text-ink-500 max-w-md mx-auto">
+          <p className="text-sm text-slate-400 max-w-md mx-auto">
             Register your first brand and we'll build a guidelines book + structured
             data you can feed to the ad generator.
           </p>
@@ -74,24 +81,29 @@ export function BrandsListPage() {
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {jobs.map((j) => (
             <li key={j.jobId}>
-              <Link to={`/brands/${j.jobId}`} className="panel p-6 block hover:bg-paper-dark transition group">
+              <Link
+                to={`/brands/${j.jobId}`}
+                className="panel p-6 block hover:border-brand/30 hover:bg-ink-900/80 transition group"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="label">{statusLabel(j.status)}</div>
-                    <div className="font-display text-2xl tracking-tightest text-ink-900 mt-1 break-words">
+                    <div className="label flex items-center gap-2">
+                      <StatusDot status={j.status} />
+                      {statusLabel(j.status)}
+                    </div>
+                    <div className="text-xl font-semibold text-slate-100 tracking-tight mt-2 break-words">
                       {hostnameFromUrl(j.url) || j.jobId.slice(0, 12)}
                     </div>
                     {j.url && (
-                      <div className="mt-1 text-xs text-ink-500 truncate">{j.url}</div>
+                      <div className="mt-1 text-xs text-slate-500 truncate">{j.url}</div>
                     )}
                   </div>
-                  <StatusDot status={j.status} />
                 </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-[11px] font-mono text-ink-500">
+                <div className="mt-5 flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-600">
                     {j.jobId.slice(0, 8)}
                   </span>
-                  <span className="text-xs text-ink-500 group-hover:text-ink-900 transition">
+                  <span className="text-xs text-slate-500 group-hover:text-brand transition">
                     Open →
                   </span>
                 </div>
@@ -107,11 +119,11 @@ export function BrandsListPage() {
 function StatusDot({ status }: { status: string }) {
   const cls =
     status === 'done'
-      ? 'bg-accent'
+      ? 'bg-emerald-400'
       : status === 'error'
-        ? 'bg-red-500'
-        : 'bg-ink-300';
-  return <span className={`h-2 w-2 rounded-full ${cls} shrink-0 mt-2`} />;
+        ? 'bg-rose-400'
+        : 'bg-slate-500 animate-pulse';
+  return <span className={`h-1.5 w-1.5 rounded-full ${cls} shrink-0`} />;
 }
 
 function statusLabel(status: string): string {

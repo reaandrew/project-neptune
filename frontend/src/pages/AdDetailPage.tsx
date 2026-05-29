@@ -24,7 +24,6 @@ export function AdDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
 
-  // Polling
   useEffect(() => {
     if (!adId) return;
     let cancelled = false;
@@ -63,22 +62,25 @@ export function AdDetailPage() {
   return (
     <div className="space-y-10">
       <div>
-        <Link to={`/brands/${jobId}`} className="text-xs text-ink-500 hover:text-ink-900">
+        <Link to={`/brands/${jobId}`} className="text-xs text-slate-500 hover:text-slate-200 inline-flex items-center gap-1">
           ← Brand
         </Link>
-        <div className="mt-2">
-          <div className="label">{ad ? statusLabel(ad.status) : 'Loading'}</div>
-          <h1 className="font-display text-5xl md:text-6xl tracking-tightest text-ink-900 mt-2 break-words">
+        <div className="mt-3 border-b border-white/5 pb-8">
+          <div className="label flex items-center gap-3">
+            <span className="accent-rule" />
+            {ad ? statusLabel(ad.status) : 'Loading'}
+          </div>
+          <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-slate-100 break-words">
             {ad?.headline || 'Ad'}
           </h1>
-          <div className="mt-1 text-xs font-mono text-ink-500 break-all">
+          <div className="mt-2 text-xs font-mono text-slate-600 break-all">
             {adId}
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-300/60 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-300">
           {error}
         </div>
       )}
@@ -87,13 +89,13 @@ export function AdDetailPage() {
         <RunningCard label="Queued. Spinning up the worker." />
       )}
       {ad?.status === 'running' && (
-        <RunningCard label="GPT-5 drafting prompt → gpt-image-1 rendering. ~30-90s." />
+        <RunningCard label="GPT-5 drafting prompt → gpt-image-1 rendering — ~30-90s." />
       )}
 
       {ad?.status === 'error' && (
-        <div className="panel p-6 border-red-300/60 bg-red-50">
-          <div className="label text-red-700">Generation failed</div>
-          <div className="mt-2 text-sm text-red-700 break-words">{ad.error}</div>
+        <div className="panel border-rose-500/30 bg-rose-500/5 p-6">
+          <div className="label text-rose-300">Generation failed</div>
+          <div className="mt-2 text-sm text-rose-200 break-words">{ad.error}</div>
         </div>
       )}
 
@@ -114,54 +116,60 @@ export function AdDetailPage() {
 function RunningCard({ label }: { label: string }) {
   return (
     <div className="panel p-8 flex items-center gap-4">
-      <span className="h-3 w-3 rounded-full bg-accent animate-pulse" />
-      <span className="text-sm text-ink-700">{label}</span>
+      <span className="h-2.5 w-2.5 rounded-full bg-brand animate-pulse shadow-[0_0_12px_rgba(34,211,238,0.7)]" />
+      <span className="text-sm text-slate-300">{label}</span>
     </div>
   );
 }
 
 function ResultCard({ ad }: { ad: AdJob }) {
   return (
-    <section className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-      <div className="lg:col-span-3 panel-flush bg-white p-4">
+    <section className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+      <div className="lg:col-span-3 panel p-3">
         {ad.imageUrl ? (
           <img
             src={ad.imageUrl}
             alt={ad.headline || 'Generated ad'}
-            className="w-full rounded-xl"
+            className="w-full rounded-lg"
           />
         ) : (
-          <div className="aspect-square bg-paper-dark rounded-xl" />
+          <div className="aspect-square bg-ink-900 rounded-lg" />
         )}
       </div>
-      <div className="lg:col-span-2 space-y-4">
+      <div className="lg:col-span-2 space-y-3">
         <div className="panel p-5 space-y-3">
-          <div className="label">Copy used</div>
+          <div className="label flex items-center gap-3">
+            <span className="accent-rule" />
+            Copy used
+          </div>
           {ad.headline && (
             <div>
-              <div className="text-[11px] text-ink-500">Headline</div>
-              <div className="font-display text-2xl tracking-tightest text-ink-900 mt-1">
+              <div className="text-[11px] text-slate-500">Headline</div>
+              <div className="text-xl font-semibold text-slate-100 tracking-tight mt-1">
                 {ad.headline}
               </div>
             </div>
           )}
           {ad.body && (
             <div>
-              <div className="text-[11px] text-ink-500">Body</div>
-              <div className="text-sm text-ink-700 mt-1">{ad.body}</div>
+              <div className="text-[11px] text-slate-500">Body</div>
+              <div className="text-sm text-slate-300 mt-1">{ad.body}</div>
             </div>
           )}
           {ad.cta && (
             <div>
-              <div className="text-[11px] text-ink-500">CTA</div>
-              <div className="text-sm text-ink-900 font-medium mt-1">{ad.cta}</div>
+              <div className="text-[11px] text-slate-500">CTA</div>
+              <div className="text-sm text-brand font-medium mt-1">{ad.cta}</div>
             </div>
           )}
         </div>
         {(ad.resolvedPlatform || ad.resolvedObjective || ad.resolvedLayout || ad.resolvedAngle) && (
-          <div className="panel p-5 space-y-2">
-            <div className="label">Creative brief</div>
-            <dl className="text-xs space-y-1.5 text-ink-700">
+          <div className="panel p-5 space-y-3">
+            <div className="label flex items-center gap-3">
+              <span className="accent-rule" />
+              Creative brief
+            </div>
+            <dl className="text-xs space-y-1.5 text-slate-300">
               {ad.resolvedPlatform && <Row k="Platform" v={ad.resolvedPlatform} />}
               {ad.resolvedObjective && <Row k="Objective" v={ad.resolvedObjective} />}
               {ad.resolvedLayout && <Row k="Layout" v={ad.resolvedLayout} />}
@@ -176,6 +184,15 @@ function ResultCard({ ad }: { ad: AdJob }) {
         )}
       </div>
     </section>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <dt className="text-slate-500 w-20 shrink-0">{k}</dt>
+      <dd className="text-slate-200">{v}</dd>
+    </div>
   );
 }
 
@@ -196,7 +213,6 @@ function ReviseSection({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form when navigating to a new ad.
   useEffect(() => {
     setHeadline(currentAd.headline ?? '');
     setBody(currentAd.body ?? '');
@@ -229,18 +245,21 @@ function ReviseSection({
   };
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-5 border-t border-white/5 pt-10">
       <div>
-        <div className="label">Revise</div>
-        <h2 className="font-display text-3xl tracking-tightest text-ink-900 mt-1">
-          Tweak and regenerate.
+        <div className="label flex items-center gap-3">
+          <span className="accent-rule" />
+          Revise
+        </div>
+        <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-100">
+          Tweak and <span className="text-brand">regenerate.</span>
         </h2>
-        <p className="text-sm text-ink-500 mt-1 max-w-xl">
+        <p className="text-sm text-slate-400 mt-2 max-w-xl">
           Edit the copy and submit — produces a new ad off the same brand. The
-          original stays put in the ad list.
+          original stays put in the ads list.
         </p>
       </div>
-      <form onSubmit={onSubmit} className="panel p-6 space-y-4">
+      <form onSubmit={onSubmit} className="panel-elevated p-6 space-y-5">
         <RefineDrawer brief={brief} onChange={setBrief} />
         <div className="space-y-3">
           <Field label="Headline" value={headline} onChange={setHeadline} />
@@ -248,14 +267,14 @@ function ReviseSection({
           <Field label="Call to action" value={cta} onChange={setCta} />
           <Field label="Sample-ad URL (optional)" value={sampleAdUrl} onChange={setSampleAdUrl} placeholder="https://… layout style cue" />
         </div>
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end pt-2 border-t border-white/5">
           <button type="submit" disabled={submitting} className="btn-primary">
-            {submitting ? 'Starting…' : 'Revise & regenerate'}
+            {submitting ? 'Starting…' : 'Revise & regenerate →'}
           </button>
         </div>
       </form>
       {error && (
-        <div className="rounded-xl border border-red-300/60 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-3 text-sm text-rose-300">
           {error}
         </div>
       )}
@@ -277,7 +296,7 @@ function Field({
   multiline?: boolean;
 }) {
   return (
-    <label className="block space-y-2">
+    <label className="block space-y-1.5">
       <span className="label">{label}</span>
       {multiline ? (
         <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input" />
@@ -285,15 +304,6 @@ function Field({
         <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input" />
       )}
     </label>
-  );
-}
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <dt className="text-ink-500 w-20 shrink-0">{k}</dt>
-      <dd className="text-ink-900">{v}</dd>
-    </div>
   );
 }
 

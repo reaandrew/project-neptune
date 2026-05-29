@@ -4,31 +4,27 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Editorial palette — warm paper + muted ink, with a strong
-        // accent. Aims for the same "brand book cover" feel as the PDF
-        // (big display type on a coloured panel).
-        paper: {
-          DEFAULT: '#F5F2EC',  // cover-page neutral
-          dark: '#EDE9DF',     // hover / inset surfaces
-        },
+        // Pulled verbatim from andrewreaassociates.com so this app
+        // sits inside the consultancy's existing brand system.
         ink: {
-          900: '#111111',      // primary text
-          700: '#3A3A3A',
-          500: '#6B6B6B',      // secondary text
-          300: '#B5B0A5',      // tertiary / borders
+          950: '#080c16',  // deepest page background
+          900: '#0f172a',  // panel surface
+          800: '#1e293b',  // panel border / inset
+          700: '#334155',  // muted lines
         },
-        accent: {
-          DEFAULT: '#0F4C3A',  // deep forest — matches editorial feel
-          soft: '#E8EFE9',     // pale accent wash
+        brand: {
+          DEFAULT: '#0891b2',  // primary cyan
+          bright: '#22d3ee',   // hover / highlight
+          dim:    '#0e7490',   // pressed / muted
         },
       },
       fontFamily: {
-        display: ['"Instrument Serif"', 'Georgia', 'ui-serif', 'serif'],
         sans: ['"Inter"', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['"Inter"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       letterSpacing: {
-        tightest: '-0.04em',
+        widest2: '0.18em',
       },
     },
   },

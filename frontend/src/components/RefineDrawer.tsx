@@ -62,19 +62,21 @@ export function RefineDrawer({
     (brief.angle ? 1 : 0);
 
   return (
-    <div className="border border-ink-300/40 rounded-2xl bg-paper-dark/50">
+    <div className="border border-white/10 rounded-md bg-ink-900/40">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full px-5 py-3 flex items-center justify-between text-left"
+        className="w-full px-4 py-3 flex items-center justify-between text-left"
       >
         <span className="label">Refine the brief (optional)</span>
-        <span className="text-xs text-ink-500">
-          {lockedCount > 0 ? `${lockedCount} locked` : 'Auto'} {open ? '▴' : '▾'}
+        <span className="text-xs text-slate-500">
+          {lockedCount > 0 ? (
+            <span className="text-brand">{lockedCount} locked</span>
+          ) : 'Auto'} {open ? '▴' : '▾'}
         </span>
       </button>
       {open && (
-        <div className="px-5 pb-5 pt-1 space-y-4">
+        <div className="px-4 pb-4 pt-1 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Select
               label="01 · Platform / placement"
@@ -108,7 +110,7 @@ export function RefineDrawer({
               <button
                 type="button"
                 onClick={() => onChange({ ...brief, elements: new Set(DEFAULT_ELEMENT_SET) })}
-                className="text-[11px] text-ink-500 hover:text-ink-900"
+                className="text-[11px] uppercase tracking-widest2 text-slate-500 hover:text-slate-200"
               >
                 Reset
               </button>
@@ -119,10 +121,10 @@ export function RefineDrawer({
                 return (
                   <label
                     key={id}
-                    className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs cursor-pointer border transition ${
+                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs cursor-pointer border transition ${
                       on
-                        ? 'border-ink-900 bg-ink-900 text-paper'
-                        : 'border-ink-300/60 bg-white hover:bg-paper-dark text-ink-700'
+                        ? 'border-brand/60 bg-brand/10 text-slate-100'
+                        : 'border-white/10 bg-ink-900/60 text-slate-400 hover:border-white/30'
                     }`}
                   >
                     <input
@@ -136,6 +138,9 @@ export function RefineDrawer({
                         onChange({ ...brief, elements: next });
                       }}
                     />
+                    <span className={`block h-3 w-3 rounded-sm border ${on ? 'bg-brand border-brand' : 'border-white/30'} grid place-items-center text-[10px] text-ink-950`}>
+                      {on ? '✓' : ''}
+                    </span>
                     {label}
                   </label>
                 );
@@ -165,7 +170,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-ink-300/60 bg-white px-3 py-2 text-sm text-ink-900 focus:border-ink-900 focus:outline-none"
+        className="w-full rounded-md border border-white/10 bg-ink-900/70 px-3 py-2.5 text-sm text-slate-100 focus:border-brand/70 focus:outline-none focus:ring-1 focus:ring-brand/30"
       >
         <option value="">Auto (random)</option>
         {options.map(([id, lbl]) => (

@@ -29,7 +29,6 @@ export function BrandDetailPage() {
   const [regenerating, setRegenerating] = useState(false);
   const timerRef = useRef<number | null>(null);
 
-  // Poll brand-job until done.
   useEffect(() => {
     if (!jobId) return;
     let cancelled = false;
@@ -65,16 +64,13 @@ export function BrandDetailPage() {
     };
   }, [jobId]);
 
-  // Load ads for this brand.
   const loadAds = () => {
     listAds(jobId)
       .then((res) => setAds(res.ads))
       .catch((err) => {
         if (err instanceof UnauthorizedError) {
           redirectToLogin();
-          return;
         }
-        // Soft failure — ads section just shows nothing.
       });
   };
   useEffect(() => {
@@ -103,13 +99,16 @@ export function BrandDetailPage() {
   return (
     <div className="space-y-12">
       <div>
-        <Link to="/brands" className="text-xs text-ink-500 hover:text-ink-900">
+        <Link to="/brands" className="text-xs text-slate-500 hover:text-slate-200 inline-flex items-center gap-1">
           ← Brands
         </Link>
-        <div className="mt-2 flex items-end justify-between gap-6 flex-wrap">
+        <div className="mt-3 flex items-end justify-between gap-6 flex-wrap border-b border-white/5 pb-8">
           <div>
-            <div className="label">{job ? statusLabel(job.status) : 'Loading'}</div>
-            <h1 className="font-display text-5xl md:text-6xl tracking-tightest text-ink-900 mt-2 break-words">
+            <div className="label flex items-center gap-3">
+              <span className="accent-rule" />
+              {job ? statusLabel(job.status) : 'Loading'}
+            </div>
+            <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-slate-100 break-words">
               {brandName}
             </h1>
             {job?.url && (
@@ -117,7 +116,7 @@ export function BrandDetailPage() {
                 href={job.url}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2 inline-block text-sm text-ink-500 underline hover:text-ink-900 break-all"
+                className="mt-2 inline-block text-sm text-slate-500 hover:text-brand transition break-all"
               >
                 {job.url}
               </a>
@@ -127,7 +126,7 @@ export function BrandDetailPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-300/60 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-300">
           {error}
         </div>
       )}
@@ -136,13 +135,13 @@ export function BrandDetailPage() {
         <RunningCard label="Queued. Spinning up the worker." />
       )}
       {job?.status === 'running' && (
-        <RunningCard label="Crawling, screenshotting, Bedrock vision passes, PDF render. Up to ~5 minutes." />
+        <RunningCard label="Crawling, screenshotting, Bedrock vision passes, PDF render — up to ~5 minutes." />
       )}
 
       {job?.status === 'error' && (
-        <div className="panel p-6 border-red-300/60 bg-red-50">
-          <div className="label text-red-700">Generation failed</div>
-          <div className="mt-2 text-sm text-red-700">{job.error || 'Unknown error'}</div>
+        <div className="panel border-rose-500/30 bg-rose-500/5 p-6">
+          <div className="label text-rose-300">Generation failed</div>
+          <div className="mt-2 text-sm text-rose-200">{job.error || 'Unknown error'}</div>
         </div>
       )}
 
@@ -159,8 +158,8 @@ export function BrandDetailPage() {
 function RunningCard({ label }: { label: string }) {
   return (
     <div className="panel p-8 flex items-center gap-4">
-      <span className="h-3 w-3 rounded-full bg-accent animate-pulse" />
-      <span className="text-sm text-ink-700">{label}</span>
+      <span className="h-2.5 w-2.5 rounded-full bg-brand animate-pulse shadow-[0_0_12px_rgba(34,211,238,0.7)]" />
+      <span className="text-sm text-slate-300">{label}</span>
     </div>
   );
 }
@@ -175,24 +174,27 @@ function DownloadsPanel({
   regenerating: boolean;
 }) {
   return (
-    <section className="space-y-4">
-      <div className="flex items-end justify-between gap-3">
+    <section className="space-y-5">
+      <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="label">Guidelines</div>
-          <h2 className="font-display text-3xl tracking-tightest text-ink-900 mt-1">
+          <div className="label flex items-center gap-3">
+            <span className="accent-rule" />
+            Guidelines
+          </div>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">
             Downloads.
           </h2>
         </div>
         <button
           onClick={onRegenerate}
           disabled={regenerating}
-          className="btn-ghost text-xs"
+          className="text-[11px] uppercase tracking-widest2 text-slate-500 hover:text-slate-200 disabled:opacity-40"
           title="Re-runs the full pipeline (~$3)"
         >
-          {regenerating ? 'Starting…' : 'Regenerate'}
+          {regenerating ? 'Starting…' : 'Regenerate ↻'}
         </button>
       </div>
-      <div className="panel p-6 space-y-3">
+      <div className="panel p-6 space-y-4">
         <div className="flex flex-wrap gap-2">
           {job.pdfUrl && (
             <a href={job.pdfUrl} target="_blank" rel="noreferrer" className="btn-primary">
@@ -210,7 +212,7 @@ function DownloadsPanel({
             </a>
           )}
         </div>
-        <div className="text-xs text-ink-500">
+        <div className="text-xs text-slate-500 pt-2 border-t border-white/5">
           Download links expire after 15 minutes — refresh this page to regenerate them.
         </div>
       </div>
@@ -235,6 +237,7 @@ function AdsSection({
   const [brief, setBrief] = useState<CreativeBrief>(() => makeDefaultBrief());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -262,87 +265,103 @@ function AdsSection({
   };
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-end justify-between gap-3">
+    <section className="space-y-5">
+      <div className="grid gap-8 md:grid-cols-[1.6fr,1fr] md:items-end border-t border-white/5 pt-10">
         <div>
-          <div className="label">Studio</div>
-          <h2 className="font-display text-3xl tracking-tightest text-ink-900 mt-1">
-            Ads.
+          <div className="label flex items-center gap-3">
+            <span className="accent-rule" />
+            Studio
+          </div>
+          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight text-slate-100">
+            Generate an ad <span className="text-brand">brief.</span>
           </h2>
-        </div>
-        {ads && (
-          <button onClick={onRefresh} className="text-xs text-ink-500 hover:text-ink-900">
-            Refresh
-          </button>
-        )}
-      </div>
-
-      {ads && ads.length > 0 && (
-        <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {ads.map((a) => (
-            <li key={a.adId}>
-              <Link
-                to={`/brands/${brandJobId}/ads/${a.adId}`}
-                className="panel-flush p-4 bg-white block hover:bg-paper-dark transition"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="label">{adStatusLabel(a.status)}</div>
-                    <div className="font-display text-lg tracking-tightest text-ink-900 mt-1 line-clamp-2">
-                      {a.headline || '(awaiting copy)'}
-                    </div>
-                  </div>
-                  <AdStatusDot status={a.status} />
-                </div>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-ink-500">
-                  <span className="font-mono">{a.adId.slice(0, 8)}</span>
-                  <span>Open →</span>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="panel p-6 space-y-4">
-        <div>
-          <div className="label">New ad</div>
-          <h3 className="font-display text-2xl tracking-tightest text-ink-900 mt-1">
-            Generate from this brand.
-          </h3>
-          <p className="text-sm text-ink-500 mt-1 max-w-xl">
-            All four fields below are optional — leave them blank and GPT-5 writes
-            the copy from the brand's tone, mission and services. Then gpt-image-1
-            renders a 1024×1024 Facebook square using the brand's logo + a real
-            site photo as reference.
+          <p className="mt-3 text-sm text-slate-400 max-w-xl">
+            Every generation is built straight from{' '}
+            <strong className="text-slate-200">your brand guidelines</strong> — logo,
+            colour palette, tone, and a real site photo. Leave the refine drawer
+            closed for fully automatic.
           </p>
         </div>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <div className="flex md:justify-end items-center gap-3 flex-wrap">
+          {ads && ads.length > 0 && (
+            <button onClick={onRefresh} className="text-[11px] uppercase tracking-widest2 text-slate-500 hover:text-slate-200">
+              Refresh ↻
+            </button>
+          )}
+          <button
+            onClick={() => setFormOpen((v) => !v)}
+            className="btn-primary"
+          >
+            {formOpen ? 'Hide form' : 'Generate ad'}
+          </button>
+        </div>
+      </div>
+
+      {formOpen && (
+        <form onSubmit={onSubmit} className="panel-elevated p-6 space-y-5">
           <RefineDrawer brief={brief} onChange={setBrief} />
-          <details className="border border-ink-300/40 rounded-2xl bg-paper-dark/50">
-            <summary className="px-5 py-3 cursor-pointer text-sm text-ink-700 list-none flex items-center justify-between">
+          <details className="border border-white/10 rounded-md bg-ink-900/40">
+            <summary className="px-4 py-3 cursor-pointer text-sm text-slate-300 list-none flex items-center justify-between">
               <span className="label">Lock the copy too (optional)</span>
-              <span className="text-xs text-ink-500">Open ▾</span>
+              <span className="text-xs text-slate-500">Open ▾</span>
             </summary>
-            <div className="px-5 pb-5 pt-1 space-y-3">
+            <div className="px-4 pb-4 pt-1 space-y-3">
               <Field label="Headline" value={headline} onChange={setHeadline} placeholder="Leave blank to auto-generate" />
               <Field label="Supporting copy" value={body} onChange={setBody} multiline placeholder="Leave blank to auto-generate" />
               <Field label="Call to action" value={cta} onChange={setCta} placeholder="Leave blank to auto-generate" />
               <Field label="Sample-ad URL" value={sampleAdUrl} onChange={setSampleAdUrl} placeholder="https://… layout style cue" />
             </div>
           </details>
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end pt-2 border-t border-white/5">
             <button type="submit" disabled={submitting} className="btn-primary">
-              {submitting ? 'Starting…' : 'Generate ad'}
+              {submitting ? 'Starting…' : 'Generate ad →'}
             </button>
           </div>
+          {error && (
+            <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-3 text-sm text-rose-300">
+              {error}
+            </div>
+          )}
         </form>
-        {error && (
-          <div className="rounded-xl border border-red-300/60 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-      </div>
+      )}
+
+      {ads && ads.length > 0 && (
+        <div className="space-y-3">
+          <div className="label">{ads.length} {ads.length === 1 ? 'ad' : 'ads'}</div>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {ads.map((a) => (
+              <li key={a.adId}>
+                <Link
+                  to={`/brands/${brandJobId}/ads/${a.adId}`}
+                  className="panel p-4 block hover:border-brand/30 hover:bg-ink-900/80 transition"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="label flex items-center gap-2">
+                        <AdStatusDot status={a.status} />
+                        {adStatusLabel(a.status)}
+                      </div>
+                      <div className="text-base font-semibold text-slate-100 tracking-tight mt-1.5 line-clamp-2">
+                        {a.headline || '(awaiting copy)'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-[10px] text-slate-600">
+                    <span className="font-mono">{a.adId.slice(0, 8)}</span>
+                    <span>Open →</span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {ads && ads.length === 0 && (
+        <div className="panel p-8 text-center text-sm text-slate-500">
+          No ads yet. Open the form above to generate your first.
+        </div>
+      )}
     </section>
   );
 }
@@ -361,24 +380,12 @@ function Field({
   multiline?: boolean;
 }) {
   return (
-    <label className="block space-y-2">
+    <label className="block space-y-1.5">
       <span className="label">{label}</span>
       {multiline ? (
-        <textarea
-          rows={3}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="input"
-        />
+        <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input" />
       ) : (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="input"
-        />
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input" />
       )}
     </label>
   );
@@ -387,11 +394,11 @@ function Field({
 function AdStatusDot({ status }: { status: string }) {
   const cls =
     status === 'done'
-      ? 'bg-accent'
+      ? 'bg-emerald-400'
       : status === 'error'
-        ? 'bg-red-500'
-        : 'bg-ink-300 animate-pulse';
-  return <span className={`h-2 w-2 rounded-full ${cls} shrink-0 mt-2`} />;
+        ? 'bg-rose-400'
+        : 'bg-slate-500 animate-pulse';
+  return <span className={`h-1.5 w-1.5 rounded-full ${cls} shrink-0`} />;
 }
 
 function statusLabel(status: string): string {
