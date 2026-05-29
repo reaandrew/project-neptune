@@ -277,8 +277,31 @@ def cover_page(
     c.setFont(BODY_FONT, 14)
     c.drawString(MARGIN, year_y, str(year))
 
+    # The brand's own logo is the centrepiece of the cover — sits in
+    # the upper half of the left panel, above the brand name. Drawn
+    # directly on the brand colour; for typical web logos this is the
+    # mode they were designed for.
+    if logo_url:
+        brand_data = fetch_image(logo_url)
+        if brand_data:
+            try:
+                img = ImageReader(io.BytesIO(brand_data))
+                iw, ih = img.getSize()
+                max_w = min(300, text_w * 0.85)
+                max_h = 120
+                scale = min(max_w / iw, max_h / ih)
+                dw, dh = iw * scale, ih * scale
+                # Place so the logo sits comfortably above the brand
+                # name (whose top edge is around PAGE_H / 2 + 30 for
+                # the 56pt title).
+                logo_y = PAGE_H / 2 + 60
+                c.drawImage(img, MARGIN, logo_y, dw, dh, mask="auto")
+            except Exception as e:
+                print(f"  ! could not render cover brand logo {logo_url}: {e}", file=sys.stderr)
+
     # Brand name + subtitle, centred vertically on the left panel.
     # Shrink slightly when a screenshot is squeezing the text column.
+    c.setFillColor(HexColor(text_color))
     name_size = 56 if have_screenshot else 64
     c.setFont(HEADER_FONT, name_size)
     c.drawString(MARGIN, PAGE_H / 2 - 30, brand_name)
