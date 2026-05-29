@@ -1102,13 +1102,32 @@ def photography_page(
 
     cols = 3
     cell_w = (PAGE_W - 2 * MARGIN - GUTTER * (cols - 1)) / cols
-    cell_h = 180
-    caption_h = 60
+
+    # Vertical budget on landscape A4: PAGE_H (~595) minus top margin,
+    # title block (~80), and a footer reservation of ~60 leaves about
+    # 400pt for two rows of cells. Each row = image + pill + 2 lines of
+    # description + spacing.
+    pill_h = 14
+    desc_lines = 2
+    desc_line_h = 11
+    caption_block = 8 + pill_h + 4 + desc_lines * desc_line_h  # gap + pill + gap + lines
+    inter_row_gap = 12
+    cell_h = 140
+    row_pitch = cell_h + caption_block + inter_row_gap
+
+    # Reserve room above the footer (the page chrome footer sits ~30pt
+    # above the page bottom). Refuse to render anything that would fall
+    # into the footer band.
+    bottom_safe = MARGIN + 40
 
     for i, item in enumerate(items):
         row, col = divmod(i, cols)
         x = MARGIN + col * (cell_w + GUTTER)
-        cy = y - row * (cell_h + caption_h + 24)
+        cy = y - row * row_pitch
+
+        # Skip this cell entirely if it would intersect the footer.
+        if cy - cell_h - caption_block < bottom_safe:
+            continue
 
         # Image tile (with faint border)
         c.setStrokeColor(HexColor("#E0E0E0"))
@@ -1130,24 +1149,24 @@ def photography_page(
             except Exception as e:
                 print(f"  ! could not render marketing image {item.get('url')}: {e}", file=sys.stderr)
 
-        # Category pill
+        # Category pill — sits just below the image tile.
         category = (item.get("category") or "other").upper()
         pill_text_w = stringWidth(category, HEADER_FONT, 7)
         pill_w = pill_text_w + 12
-        pill_y = cy - cell_h - 16
+        pill_y = cy - cell_h - 8 - pill_h  # 8pt gap from image bottom
         c.setFillColor(HexColor(primary_color))
-        c.roundRect(x, pill_y, pill_w, 14, 4, fill=1, stroke=0)
+        c.roundRect(x, pill_y, pill_w, pill_h, 4, fill=1, stroke=0)
         c.setFillColor(HexColor(contrasting_text(primary_color)))
         c.setFont(HEADER_FONT, 7)
         c.drawString(x + 6, pill_y + 4, category)
 
-        # Description
+        # Description — capped at 2 lines so the cell stays in budget.
         desc = item.get("description") or ""
         c.setFillColor(HexColor("#333333"))
         c.setFont(BODY_FONT, 9)
-        wrapped = wrap_text(desc, BODY_FONT, 9, cell_w)[:3]
+        wrapped = wrap_text(desc, BODY_FONT, 9, cell_w)[:desc_lines]
         for j, line in enumerate(wrapped):
-            c.drawString(x, pill_y - 14 - j * 11, line)
+            c.drawString(x, pill_y - 4 - (j + 1) * desc_line_h, line)
 
     c.showPage()
     return page_num + 1
