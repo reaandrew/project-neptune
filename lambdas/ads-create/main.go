@@ -93,6 +93,16 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return errResp(400, "brandJobId required"), nil
 	}
 
+	subject := ""
+	if req.RequestContext.Authorizer != nil && req.RequestContext.Authorizer.Lambda != nil {
+		if s, ok := req.RequestContext.Authorizer.Lambda["subject"].(string); ok {
+			subject = s
+		}
+	}
+	if subject == "" {
+		return errResp(401, "unauthenticated"), nil
+	}
+
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Printf("aws config: %v", err)
@@ -112,6 +122,11 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	if err != nil || len(bj.Item) == 0 {
 		return errResp(404, "brand job not found"), nil
 	}
+	// Ownership: can't make an ad for someone else's brand. 404 to
+	// avoid leaking existence.
+	if owner, ok := bj.Item["subject"].(*ddbtypes.AttributeValueMemberS); ok && owner.Value != "" && owner.Value != subject {
+		return errResp(404, "brand job not found"), nil
+	}
 	var status string
 	if s, ok := bj.Item["status"].(*ddbtypes.AttributeValueMemberS); ok {
 		status = s.Value
@@ -123,13 +138,6 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	adID := newID()
 	now := time.Now().UTC().Format(time.RFC3339)
 	ttl := time.Now().Add(7 * 24 * time.Hour).Unix()
-
-	subject := ""
-	if req.RequestContext.Authorizer != nil && req.RequestContext.Authorizer.Lambda != nil {
-		if s, ok := req.RequestContext.Authorizer.Lambda["subject"].(string); ok {
-			subject = s
-		}
-	}
 
 	item := map[string]ddbtypes.AttributeValue{
 		"ad_id":        &ddbtypes.AttributeValueMemberS{Value: adID},

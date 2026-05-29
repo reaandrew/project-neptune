@@ -68,6 +68,16 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return errResp(400, "missing ad id"), nil
 	}
 
+	subject := ""
+	if req.RequestContext.Authorizer != nil && req.RequestContext.Authorizer.Lambda != nil {
+		if s, ok := req.RequestContext.Authorizer.Lambda["subject"].(string); ok {
+			subject = s
+		}
+	}
+	if subject == "" {
+		return errResp(401, "unauthenticated"), nil
+	}
+
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Printf("aws config: %v", err)
@@ -86,6 +96,9 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return errResp(500, "internal error"), nil
 	}
 	if len(out.Item) == 0 {
+		return errResp(404, "not found"), nil
+	}
+	if owner := sval(out.Item, "subject"); owner != "" && owner != subject {
 		return errResp(404, "not found"), nil
 	}
 

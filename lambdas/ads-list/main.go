@@ -69,6 +69,9 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 			subject = s
 		}
 	}
+	if subject == "" {
+		return errResp(401, "unauthenticated"), nil
+	}
 	brandJobID := strings.TrimSpace(req.QueryStringParameters["brandJobId"])
 
 	awsCfg, err := config.LoadDefaultConfig(ctx)
@@ -86,20 +89,16 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		},
 	}
 
-	filters := []string{}
-	values := map[string]ddbtypes.AttributeValue{}
-	if subject != "" {
-		filters = append(filters, "subject = :sub")
-		values[":sub"] = &ddbtypes.AttributeValueMemberS{Value: subject}
+	filters := []string{"subject = :sub"}
+	values := map[string]ddbtypes.AttributeValue{
+		":sub": &ddbtypes.AttributeValueMemberS{Value: subject},
 	}
 	if brandJobID != "" {
 		filters = append(filters, "brand_job_id = :bid")
 		values[":bid"] = &ddbtypes.AttributeValueMemberS{Value: brandJobID}
 	}
-	if len(filters) > 0 {
-		input.FilterExpression = aws.String(strings.Join(filters, " AND "))
-		input.ExpressionAttributeValues = values
-	}
+	input.FilterExpression = aws.String(strings.Join(filters, " AND "))
+	input.ExpressionAttributeValues = values
 
 	var items []map[string]ddbtypes.AttributeValue
 	paginator := dynamodb.NewScanPaginator(ddb, input)

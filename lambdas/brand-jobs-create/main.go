@@ -96,14 +96,26 @@ func normaliseURL(raw string) string {
 }
 
 // findCachedJob returns the jobId of the most-recent `done` job for the
-// given normalised URL, or "" if none.
-func findCachedJob(ctx context.Context, ddb *dynamodb.Client, jobsTable, urlNorm string) string {
+// given normalised URL OWNED BY THIS SUBJECT, or "" if none. The cache
+// is per-user — User B registering the same URL gets their own job,
+// not User A's.
+func findCachedJob(ctx context.Context, ddb *dynamodb.Client, jobsTable, urlNorm, subject string) string {
+	if subject == "" {
+		// Without a subject we can't safely cache-hit. Treat as miss.
+		return ""
+	}
 	out, err := ddb.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(jobsTable),
 		IndexName:              aws.String("url-index"),
 		KeyConditionExpression: aws.String("url_normalised = :u"),
+		FilterExpression:       aws.String("subject = :sub AND #s = :done"),
+		ExpressionAttributeNames: map[string]string{
+			"#s": "status",
+		},
 		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
-			":u": &ddbtypes.AttributeValueMemberS{Value: urlNorm},
+			":u":    &ddbtypes.AttributeValueMemberS{Value: urlNorm},
+			":sub":  &ddbtypes.AttributeValueMemberS{Value: subject},
+			":done": &ddbtypes.AttributeValueMemberS{Value: "done"},
 		},
 		ScanIndexForward: aws.Bool(false), // newest created_at first
 		Limit:            aws.Int32(10),
@@ -113,9 +125,8 @@ func findCachedJob(ctx context.Context, ddb *dynamodb.Client, jobsTable, urlNorm
 		return ""
 	}
 	for _, item := range out.Items {
-		status, _ := item["status"].(*ddbtypes.AttributeValueMemberS)
 		jobID, _ := item["job_id"].(*ddbtypes.AttributeValueMemberS)
-		if status != nil && status.Value == "done" && jobID != nil && jobID.Value != "" {
+		if jobID != nil && jobID.Value != "" {
 			return jobID.Value
 		}
 	}
@@ -139,6 +150,16 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	}
 	urlNorm := normaliseURL(target)
 
+	subject := ""
+	if req.RequestContext.Authorizer != nil && req.RequestContext.Authorizer.Lambda != nil {
+		if s, ok := req.RequestContext.Authorizer.Lambda["subject"].(string); ok {
+			subject = s
+		}
+	}
+	if subject == "" {
+		return errResp(401, "unauthenticated"), nil
+	}
+
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Printf("aws config: %v", err)
@@ -147,9 +168,10 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	ddb := dynamodb.NewFromConfig(awsCfg)
 	lam := awslambda.NewFromConfig(awsCfg)
 
-	// Cache hit?
+	// Cache hit? Per-user — different users get separate brand jobs
+	// for the same URL.
 	if !body.Force {
-		if cachedID := findCachedJob(ctx, ddb, jobsTable, urlNorm); cachedID != "" {
+		if cachedID := findCachedJob(ctx, ddb, jobsTable, urlNorm, subject); cachedID != "" {
 			return jsonResp(200, responseBody{JobID: cachedID, Cached: true}), nil
 		}
 	}
@@ -159,13 +181,6 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	// TTL: drop the DDB row after 90 days. Matches the S3 lifecycle for
 	// brand-jobs/ artifacts.
 	ttl := time.Now().Add(90 * 24 * time.Hour).Unix()
-
-	subject := ""
-	if req.RequestContext.Authorizer != nil && req.RequestContext.Authorizer.Lambda != nil {
-		if s, ok := req.RequestContext.Authorizer.Lambda["subject"].(string); ok {
-			subject = s
-		}
-	}
 
 	_, err = ddb.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(jobsTable),

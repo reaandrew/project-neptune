@@ -68,6 +68,11 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 			subject = s
 		}
 	}
+	if subject == "" {
+		// Refuse to return brand-jobs when we can't identify the
+		// caller — otherwise this leaks everyone's brands.
+		return errResp(401, "unauthenticated"), nil
+	}
 
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -83,12 +88,10 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 			"#u": "url",
 			"#s": "status",
 		},
-	}
-	if subject != "" {
-		input.FilterExpression = aws.String("subject = :sub")
-		input.ExpressionAttributeValues = map[string]ddbtypes.AttributeValue{
+		FilterExpression: aws.String("subject = :sub"),
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
 			":sub": &ddbtypes.AttributeValueMemberS{Value: subject},
-		}
+		},
 	}
 
 	var items []map[string]ddbtypes.AttributeValue
