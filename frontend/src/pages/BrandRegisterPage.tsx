@@ -34,7 +34,7 @@ export function BrandRegisterPage() {
   };
 
   return (
-    <div className="space-y-10 max-w-3xl">
+    <div className="space-y-10">
       <Link to="/brands" className="text-xs text-slate-500 hover:text-slate-200 inline-flex items-center gap-1">
         ← Brands
       </Link>
