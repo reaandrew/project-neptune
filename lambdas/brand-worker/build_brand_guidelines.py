@@ -610,7 +610,26 @@ def logos_pages(
     light_is_dominant = data is not None and _is_light_artwork(data)
 
     full_w = PAGE_W - 2 * MARGIN
-    primary_h = min(300, y - MARGIN - 90)
+
+    # Vertical budget on landscape A4: y is the top of the primary
+    # tile; below it we render:
+    #   primary tile (primary_h)
+    #   12  gap to primary label
+    #   10  primary label
+    #   16  gap
+    #   companion_h (90) companion tile
+    #   12  gap to companion label
+    #   10  companion label / filename row
+    # Footer band sits ~40pt above page bottom — reserve MARGIN + 40
+    # below the last text row.
+    companion_h = 90
+    footer_band = 40
+    reserved_below_primary = (
+        12 + 10 + 16 + companion_h + 12 + 10 + footer_band
+    )
+    # Cap at 240pt so the primary tile never dominates the page even on
+    # very tall headers.
+    primary_h = max(120, min(240, y - MARGIN - reserved_below_primary))
     if light_is_dominant:
         # Dark backdrop primary; small white companion below.
         _draw_logo_in_tile(c, data, url, MARGIN, y, full_w, primary_h, dark_hex, border=False)
@@ -627,8 +646,7 @@ def logos_pages(
     c.setFont(BODY_FONT, 8)
     c.drawString(MARGIN, y - primary_h - 12, primary_label)
 
-    # Smaller companion tile underneath.
-    companion_h = 90
+    # Smaller companion tile underneath (companion_h defined above).
     companion_y = y - primary_h - 28
     _draw_logo_in_tile(
         c, data, url, MARGIN, companion_y, full_w, companion_h, secondary_bg,
