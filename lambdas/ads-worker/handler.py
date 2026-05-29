@@ -7,7 +7,13 @@ Invoked asynchronously by ads-create. Event shape:
       "headline":    "...",     # optional
       "body":        "...",     # optional
       "cta":         "...",     # optional
-      "sampleAdUrl": "..."      # optional style-reference URL
+      "sampleAdUrl": "...",     # optional style-reference URL
+      # Creative-brief dimensions — all optional; empty == auto:
+      "platform":   "facebook-feed",
+      "objective":  "get-leads",
+      "layout":     "single-hero",
+      "angle":      "benefit-led",
+      "elements":   ["logo","headline","cta","website"]
     }
 
 Pipeline:
@@ -36,6 +42,7 @@ import base64
 import io
 import json
 import os
+import random
 import sys
 import time
 import traceback
@@ -43,6 +50,89 @@ import urllib.request
 
 import boto3
 import yaml
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Creative-brief dimension lookups. Kept in sync with the frontend
+# selects in BrandJobDetailPage.tsx + Ad-Prompt static UI. Worker uses
+# the human label in the prompt sent to gpt-4o, not the slug.
+# ─────────────────────────────────────────────────────────────────────
+PLATFORM_LABELS = {
+    "facebook-feed": "Facebook feed",
+    "instagram-feed": "Instagram feed",
+    "instagram-story": "Instagram story",
+    "linkedin-post": "LinkedIn post",
+    "tiktok-reel": "TikTok / Reel cover",
+    "google-display": "Google display ad",
+    "website-banner": "Website banner",
+    "email-header": "Email header",
+    "print-flyer": "Print flyer",
+    "multi-platform": "Multi-platform pack",
+}
+OBJECTIVE_LABELS = {
+    "brand-awareness": "Brand awareness",
+    "get-leads": "Get leads",
+    "promote-service": "Promote a service",
+    "promote-product": "Promote a product",
+    "promote-offer": "Promote an offer",
+    "drive-traffic": "Drive website traffic",
+    "book-appointments": "Book appointments",
+    "promote-event": "Promote an event",
+    "build-trust": "Build trust / social proof",
+    "recruitment": "Recruitment",
+}
+LAYOUT_LABELS = {
+    "single-hero": "Single hero image",
+    "full-image-overlay": "Full image with text overlay",
+    "split-image-text": "Split image and text",
+    "grid-collage": "Grid / collage",
+    "product-card": "Product card",
+    "service-card": "Service card",
+    "offer-card": "Offer card",
+    "testimonial-card": "Testimonial card",
+    "before-after": "Before-and-after",
+    "carousel-sequence": "Carousel sequence (first frame)",
+}
+ANGLE_LABELS = {
+    "benefit-led": "Benefit-led — what the buyer gains, in their words",
+    "problem-solution": "Problem / solution — name the friction, then resolve it",
+    "trust-led": "Trust-led — credentials, accreditations, scale, years",
+    "local-expertise": "Local expertise — place names and regional pride",
+    "offer-led": "Offer-led — the deal is the hero",
+    "seasonal": "Seasonal — time-bound hook tied to the calendar",
+    "educational": "Educational — teach something the reader will thank you for",
+    "testimonial-led": "Testimonial-led — a real customer's voice is the hero",
+    "premium-quality": "Premium quality — restraint, generous whitespace, single hero element",
+    "urgency-limited": "Urgency / limited time — countdown energy without shouting",
+}
+ELEMENT_LABELS = {
+    "logo": "Logo",
+    "headline": "Headline",
+    "subheadline": "Subheadline",
+    "body": "Body copy",
+    "cta": "CTA button",
+    "website": "Website",
+    "phone": "Phone number",
+    "email": "Email",
+    "social": "Social handle",
+    "offer-badge": "Offer badge",
+    "star-rating": "Star rating",
+    "testimonial": "Testimonial",
+    "price": "Price",
+    "qr-code": "QR code",
+    "location": "Location",
+    "legal": "Legal disclaimer",
+}
+DEFAULT_ELEMENTS = ["logo", "headline", "cta", "website"]
+
+
+def _resolve_dimension(value: str, label_map: dict[str, str]) -> tuple[str, bool]:
+    """Return (human_label, was_auto). If value is empty or unknown,
+    pick a random key from the map."""
+    if value and value in label_map:
+        return label_map[value], False
+    pick = random.choice(list(label_map.keys()))
+    return label_map[pick], True
 
 ARTIFACTS_BUCKET = os.environ["ARTIFACTS_BUCKET"]
 ADS_JOBS_TABLE = os.environ["ADS_JOBS_TABLE"]
@@ -144,6 +234,27 @@ Reply with EXACTLY this JSON object — no markdown, no commentary:
   }
 
 Rules:
+- The CREATIVE BRIEF (PLATFORM / OBJECTIVE / LAYOUT / MESSAGE /
+  ELEMENTS) is the operator's choices and the image_prompt MUST
+  reflect them:
+    * PLATFORM controls aspect, safe zones and idiom. A LinkedIn
+      post reads as professional; an Instagram story is vertical
+      9:16 with bold typography; a print flyer reads as A4 portrait
+      with crisp typesetting; etc.
+    * OBJECTIVE controls structure. Lead-gen → foreground the offer
+      + CTA. Brand-awareness → foreground tone, logo, hero imagery.
+      Testimonial / build-trust → foreground a quote + attribution.
+      Recruitment → foreground people-led photography.
+    * LAYOUT is non-negotiable. Apply it verbatim: a 'Single hero
+      image' is a full-bleed photo with minimal overlay; a 'Split
+      image and text' is a 50/50 split; a 'Testimonial card' is a
+      centred card on a soft brand-coloured background; etc.
+    * MESSAGE is the copy direction. Match the headline's emotional
+      hook to it.
+    * ELEMENTS controls which on-image text/graphic items appear.
+      ONLY render the elements listed. If 'Phone number' is in the
+      list, render the brand's phone from contact_details. If it's
+      not in the list, do NOT render contact details.
 - If the user supplied any of headline/body/cta, copy them VERBATIM
   into the JSON (don't paraphrase). Fill the rest from the brand
   context — tone, mission, services, audience.
@@ -252,7 +363,17 @@ def _draft_copy_and_prompt(
     body: str,
     cta: str,
     sample_ad_url: str,
+    brief: dict,
 ) -> dict:
+    """`brief` is the resolved creative brief — a dict shaped like:
+        {
+          "platform":  ("Facebook feed", was_auto_bool),
+          "objective": ("Get leads",     was_auto_bool),
+          "layout":    ("Single hero…",  was_auto_bool),
+          "angle":     ("Benefit-led…",  was_auto_bool),
+          "elements":  [human_label, ...],
+        }
+    """
     client = _openai()
 
     # Attach the brand-guidelines PDF as a file so the text model can
@@ -268,12 +389,28 @@ def _draft_copy_and_prompt(
         except Exception as e:
             print(f"  ! pdf upload failed ({e}); proceeding without it.", file=sys.stderr)
 
+    # Render the creative brief — auto-picked values get a "(auto)"
+    # marker so gpt-4o knows the operator didn't specifically choose.
+    def _line(label: str, val: tuple[str, bool]) -> str:
+        text, was_auto = val
+        return f"  {label}: {text}" + ("  (auto)" if was_auto else "")
+    elements_line = ", ".join(brief["elements"]) if brief["elements"] else "(none — image-only composition)"
+    creative_brief_text = (
+        "CREATIVE BRIEF (operator's choices — adapt the image_prompt to these):\n"
+        f"{_line('PLATFORM ', brief['platform'])}\n"
+        f"{_line('OBJECTIVE', brief['objective'])}\n"
+        f"{_line('LAYOUT   ', brief['layout'])}\n"
+        f"{_line('MESSAGE  ', brief['angle'])}\n"
+        f"  ELEMENTS : {elements_line}"
+    )
+
     user_content = [
         {
             "type": "text",
             "text": (
                 "Brand summary JSON (extracted from the attached "
                 f"guidelines PDF):\n{json.dumps(brand_summary, indent=2)}\n\n"
+                f"{creative_brief_text}\n\n"
                 f"User-supplied headline: {headline or '(blank — invent one)'}\n"
                 f"User-supplied body:     {body or '(blank — invent one)'}\n"
                 f"User-supplied CTA:      {cta or '(blank — invent one)'}"
@@ -369,8 +506,39 @@ def handler(event, _context):
     cta = (event.get("cta") or "").strip()
     sample_ad_url = (event.get("sampleAdUrl") or "").strip()
 
+    # ── Resolve the creative brief — auto-pick anything missing. ───
+    # We seed Python's RNG with the ad_id so a given job replayed
+    # produces the same auto picks (helps when debugging an ad run).
+    random.seed(ad_id)
+    platform = _resolve_dimension(event.get("platform") or "", PLATFORM_LABELS)
+    objective = _resolve_dimension(event.get("objective") or "", OBJECTIVE_LABELS)
+    layout = _resolve_dimension(event.get("layout") or "", LAYOUT_LABELS)
+    angle = _resolve_dimension(event.get("angle") or "", ANGLE_LABELS)
+    raw_elements = event.get("elements") or []
+    if not raw_elements:
+        raw_elements = list(DEFAULT_ELEMENTS)
+    elements_labels = [
+        ELEMENT_LABELS[e] for e in raw_elements if e in ELEMENT_LABELS
+    ] or [ELEMENT_LABELS[e] for e in DEFAULT_ELEMENTS]
+    brief = {
+        "platform": platform,
+        "objective": objective,
+        "layout": layout,
+        "angle": angle,
+        "elements": elements_labels,
+    }
+
     started_at = str(int(time.time()))
-    _set_status(ad_id, "running", started_at=started_at)
+    _set_status(
+        ad_id, "running",
+        started_at=started_at,
+        # Persist the resolved brief so the operator can see what was
+        # actually used (especially what got auto-picked).
+        resolved_platform=platform[0],
+        resolved_objective=objective[0],
+        resolved_layout=layout[0],
+        resolved_angle=angle[0],
+    )
 
     try:
         # ── 1. Brand context: YAML, PDF, logo ──────────────────────
@@ -402,7 +570,7 @@ def handler(event, _context):
 
         # ── 2. Draft copy + image prompt ───────────────────────────
         drafted = _draft_copy_and_prompt(
-            summary, pdf_bytes, headline, body, cta, sample_ad_url,
+            summary, pdf_bytes, headline, body, cta, sample_ad_url, brief,
         )
         ref_url = (drafted.get("reference_image_url") or "").strip()
         print(
