@@ -94,7 +94,8 @@ export function BrandDetailPage() {
     }
   };
 
-  const brandName = hostnameFromUrl(job?.url) || jobId.slice(0, 12);
+  const brandName = job?.brandName || hostnameFromUrl(job?.url) || jobId.slice(0, 12);
+  const accent = job?.primaryColor || '#0891b2';
 
   return (
     <div className="space-y-12">
@@ -102,10 +103,44 @@ export function BrandDetailPage() {
         <Link to="/brands" className="text-xs text-slate-500 hover:text-slate-200 inline-flex items-center gap-1">
           ← Brands
         </Link>
-        <div className="mt-3 flex items-end justify-between gap-6 flex-wrap border-b border-white/5 pb-8">
+
+        {/* Hero: screenshot + brand colour accent + logo chip. */}
+        {job?.status === 'done' && (job.screenshotUrl || job.logoUrl) && (
+          <div className="mt-4 panel-flush overflow-hidden">
+            <div
+              className="relative aspect-[16/6] w-full bg-ink-900"
+              style={job.screenshotUrl ? undefined : { backgroundColor: accent }}
+            >
+              {job.screenshotUrl && (
+                <img
+                  src={job.screenshotUrl}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover object-top opacity-70"
+                />
+              )}
+              <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-ink-950/95 to-transparent" />
+              <div
+                className="absolute left-0 right-0 bottom-0 h-[4px]"
+                style={{ backgroundColor: accent }}
+              />
+              {job.logoUrl && (
+                <div className="absolute left-5 bottom-5 h-14 px-3 py-2 rounded-md bg-white/95 shadow-lg flex items-center">
+                  <img
+                    src={job.logoUrl}
+                    alt={brandName}
+                    className="max-h-10 max-w-[200px] object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 flex items-end justify-between gap-6 flex-wrap border-b border-white/5 pb-8">
           <div>
             <div className="label flex items-center gap-3">
-              <span className="accent-rule" />
+              <span className="accent-rule" style={{ backgroundColor: accent }} />
               {job ? statusLabel(job.status) : 'Loading'}
             </div>
             <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-slate-100 break-words">

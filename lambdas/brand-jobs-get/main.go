@@ -22,15 +22,19 @@ import (
 )
 
 type jobResponse struct {
-	JobID       string `json:"jobId"`
-	Status      string `json:"status"`
-	URL         string `json:"url,omitempty"`
-	PDFURL      string `json:"pdfUrl,omitempty"`
-	YAMLURL     string `json:"yamlUrl,omitempty"`
-	JSONURL     string `json:"jsonUrl,omitempty"`
-	Error       string `json:"error,omitempty"`
-	CreatedAt   string `json:"createdAt,omitempty"`
-	CompletedAt string `json:"completedAt,omitempty"`
+	JobID         string `json:"jobId"`
+	Status        string `json:"status"`
+	URL           string `json:"url,omitempty"`
+	PDFURL        string `json:"pdfUrl,omitempty"`
+	YAMLURL       string `json:"yamlUrl,omitempty"`
+	JSONURL       string `json:"jsonUrl,omitempty"`
+	ScreenshotURL string `json:"screenshotUrl,omitempty"`
+	BrandName     string `json:"brandName,omitempty"`
+	PrimaryColor  string `json:"primaryColor,omitempty"`
+	LogoURL       string `json:"logoUrl,omitempty"`
+	Error         string `json:"error,omitempty"`
+	CreatedAt     string `json:"createdAt,omitempty"`
+	CompletedAt   string `json:"completedAt,omitempty"`
 }
 
 func jsonResp(status int, body interface{}) events.APIGatewayV2HTTPResponse {
@@ -107,12 +111,15 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	}
 
 	resp := jobResponse{
-		JobID:       jobID,
-		Status:      sval(out.Item, "status"),
-		URL:         sval(out.Item, "url"),
-		Error:       sval(out.Item, "error"),
-		CreatedAt:   sval(out.Item, "created_at"),
-		CompletedAt: sval(out.Item, "completed_at"),
+		JobID:        jobID,
+		Status:       sval(out.Item, "status"),
+		URL:          sval(out.Item, "url"),
+		BrandName:    sval(out.Item, "brand_name"),
+		PrimaryColor: sval(out.Item, "primary_color"),
+		LogoURL:      sval(out.Item, "logo_url"),
+		Error:        sval(out.Item, "error"),
+		CreatedAt:    sval(out.Item, "created_at"),
+		CompletedAt:  sval(out.Item, "completed_at"),
 	}
 
 	if resp.Status == "done" {
@@ -139,6 +146,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		resp.PDFURL = sign(pdfKey)
 		resp.YAMLURL = sign(sval(out.Item, "yaml_key"))
 		resp.JSONURL = sign(sval(out.Item, "json_key"))
+		resp.ScreenshotURL = sign(sval(out.Item, "screenshot_key"))
 	}
 
 	return jsonResp(200, resp), nil

@@ -52,6 +52,10 @@ export interface BrandJob {
   pdfUrl?: string;
   yamlUrl?: string;
   jsonUrl?: string;
+  screenshotUrl?: string;
+  brandName?: string;
+  primaryColor?: string;
+  logoUrl?: string;
   error?: string;
   createdAt?: string;
   completedAt?: string;
@@ -82,6 +86,10 @@ export interface BrandJobSummary {
   url?: string;
   status: BrandJobStatus;
   createdAt?: string;
+  brandName?: string;
+  primaryColor?: string;
+  logoUrl?: string;
+  screenshotUrl?: string;
 }
 
 export function listBrandJobs(): Promise<{ jobs: BrandJobSummary[] }> {

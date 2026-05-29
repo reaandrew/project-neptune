@@ -374,7 +374,8 @@ resource "aws_lambda_function" "brand_jobs_list" {
 
   environment {
     variables = {
-      JOBS_TABLE = aws_dynamodb_table.brand_jobs.name
+      JOBS_TABLE       = aws_dynamodb_table.brand_jobs.name
+      ARTIFACTS_BUCKET = aws_s3_bucket.artifacts.id
     }
   }
 

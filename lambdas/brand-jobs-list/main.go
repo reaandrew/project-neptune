@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -18,13 +19,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type jobSummary struct {
-	JobID     string `json:"jobId"`
-	URL       string `json:"url,omitempty"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"createdAt,omitempty"`
+	JobID         string `json:"jobId"`
+	URL           string `json:"url,omitempty"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"createdAt,omitempty"`
+	BrandName     string `json:"brandName,omitempty"`
+	PrimaryColor  string `json:"primaryColor,omitempty"`
+	LogoURL       string `json:"logoUrl,omitempty"`
+	ScreenshotURL string `json:"screenshotUrl,omitempty"`
 }
 
 type listResponse struct {
@@ -58,7 +64,8 @@ func sval(m map[string]ddbtypes.AttributeValue, k string) string {
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	jobsTable := os.Getenv("JOBS_TABLE")
-	if jobsTable == "" {
+	artifactsBucket := os.Getenv("ARTIFACTS_BUCKET")
+	if jobsTable == "" || artifactsBucket == "" {
 		return errResp(500, "service misconfigured"), nil
 	}
 
@@ -82,8 +89,10 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	ddb := dynamodb.NewFromConfig(awsCfg)
 
 	input := &dynamodb.ScanInput{
-		TableName:            aws.String(jobsTable),
-		ProjectionExpression: aws.String("job_id, #u, #s, created_at, subject"),
+		TableName: aws.String(jobsTable),
+		ProjectionExpression: aws.String(
+			"job_id, #u, #s, created_at, subject, brand_name, primary_color, logo_url, screenshot_key",
+		),
 		ExpressionAttributeNames: map[string]string{
 			"#u": "url",
 			"#s": "status",
@@ -111,10 +120,13 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	jobs := make([]jobSummary, 0, len(items))
 	for _, it := range items {
 		jobs = append(jobs, jobSummary{
-			JobID:     sval(it, "job_id"),
-			URL:       sval(it, "url"),
-			Status:    sval(it, "status"),
-			CreatedAt: sval(it, "created_at"),
+			JobID:        sval(it, "job_id"),
+			URL:          sval(it, "url"),
+			Status:       sval(it, "status"),
+			CreatedAt:    sval(it, "created_at"),
+			BrandName:    sval(it, "brand_name"),
+			PrimaryColor: sval(it, "primary_color"),
+			LogoURL:      sval(it, "logo_url"),
 		})
 	}
 	sort.Slice(jobs, func(i, j int) bool {
@@ -122,6 +134,31 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	})
 	if len(jobs) > 50 {
 		jobs = jobs[:50]
+	}
+
+	// Presign the homepage screenshots so the frontend can render them
+	// directly as <img>. We grab the matching screenshot_key from the
+	// scanned items rather than re-fetching from DDB.
+	keysByJob := map[string]string{}
+	for _, it := range items {
+		keysByJob[sval(it, "job_id")] = sval(it, "screenshot_key")
+	}
+	s3Client := s3.NewFromConfig(awsCfg)
+	presigner := s3.NewPresignClient(s3Client)
+	for i := range jobs {
+		key := keysByJob[jobs[i].JobID]
+		if key == "" {
+			continue
+		}
+		r, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(artifactsBucket),
+			Key:    aws.String(key),
+		}, s3.WithPresignExpires(15*time.Minute))
+		if err != nil {
+			log.Printf("presign %s: %v", key, err)
+			continue
+		}
+		jobs[i].ScreenshotURL = r.URL
 	}
 
 	return jsonResp(200, listResponse{Jobs: jobs}), nil
