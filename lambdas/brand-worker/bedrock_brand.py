@@ -397,6 +397,155 @@ Rules:
 """
 
 
+MARKETING_PROMPT = """You are classifying photography used on a single
+brand's website so the brand-guidelines book can show designers what
+imagery the brand uses, and so a downstream ad-generator can pick the
+best photo to reference when producing new adverts.
+
+DOMAIN: {domain}
+
+Below are individual photographs taken from the brand's site. For each
+one I'll show you the URL it lives at, then the actual pixels.
+
+CATEGORIES (pick exactly one per image)
+- "lifestyle"   People using or benefiting from the product/service in
+                a real-world setting. Strong human presence, candid feel.
+- "product"     Close-up of the actual product, service deliverable, or
+                physical thing the brand sells. Object-led, not person-led.
+- "context"     The environment the product lives in, with little or
+                no people. House, driveway, shopfront, vehicle, site.
+- "team"        Staff or company portraits — owners, employees, "our
+                team" pages.
+- "testimonial" A customer's face or a customer setting, used to give
+                a quote or review credibility.
+- "decorative"  Patterns, abstract gradients, illustrative spot art,
+                blurred background washes that aren't depicting anything
+                specific.
+- "other"       Doesn't fit any of the above.
+
+For each image return:
+- "category": one of the above
+- "description": one short sentence on what the image shows. Be
+  concrete: "Green skip half full of bricks on a paved driveway, semi-
+  detached house in background, daylight" — not "skip image".
+- "subjects": 1-5 single-word or two-word nouns naming the things in
+  the photo. ("skip", "bricks", "driveway", "house").
+- "suitable_for_ads": true if a marketer could realistically use this
+  photo (or one like it) as the hero of a Facebook ad — i.e. it shows
+  the business in action, has reasonable composition, isn't pure
+  decoration, isn't a generic stock cliché, isn't a screenshot of UI.
+  false otherwise.
+
+Return STRICT JSON, no markdown:
+
+{{
+  "images": [
+    {{
+      "url": "<the URL>",
+      "category": "lifestyle | product | context | team | testimonial | decorative | other",
+      "description": "...",
+      "subjects": ["...", "..."],
+      "suitable_for_ads": true
+    }}
+  ]
+}}
+
+Every URL I show you below must appear exactly once in "images"."""
+
+
+def classify_marketing_imagery(
+    candidate_urls: list[str],
+    *,
+    domain: str,
+    batch_size: int = 12,
+    max_image_bytes: int = 4 * 1024 * 1024,
+    min_image_bytes: int = 5 * 1024,
+    model_id: str | None = None,
+    region: str | None = None,
+    max_tokens: int = 4000,
+) -> dict[str, Any]:
+    """Triage candidate marketing photos. Returns
+    {"images": [{"url", "category", "description", "subjects",
+                 "suitable_for_ads"}, ...]}.
+
+    Inlines each image's pixel bytes — the model can't reason about
+    "is this suitable for an ad?" from a filename alone. Drops images
+    that are too small (likely icons) or too large (likely uncompressed
+    hero shots that blow the 5MB cap).
+
+    Batches into ~12 images per call to stay under Bedrock's per-request
+    image limits and keep latency reasonable.
+    """
+    if not candidate_urls:
+        return {"images": []}
+
+    model_id, region = _resolve_model_and_region(model_id, region)
+
+    # Dedup + fetch
+    seen: set[str] = set()
+    fetched: list[tuple[str, bytes, str]] = []  # (url, bytes, media_type)
+    for url in candidate_urls:
+        if url in seen:
+            continue
+        seen.add(url)
+        data = _fetch_image_bytes(url)
+        if not data:
+            continue
+        if len(data) < min_image_bytes:
+            continue  # tiny image, almost certainly an icon
+        if len(data) > max_image_bytes:
+            continue  # too big for Bedrock, skip
+        fetched.append((url, data, _guess_media_type(data, url)))
+
+    if not fetched:
+        return {"images": []}
+
+    aggregated: list[dict[str, Any]] = []
+    for start in range(0, len(fetched), batch_size):
+        batch = fetched[start : start + batch_size]
+
+        content: list[dict[str, Any]] = [
+            {"type": "text", "text": MARKETING_PROMPT.format(domain=domain)}
+        ]
+        url_list_lines: list[str] = []
+        for url, data, media_type in batch:
+            url_list_lines.append(f"- {url}")
+            content.append({"type": "text", "text": f"Image for URL: {url}"})
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.standard_b64encode(data).decode("ascii"),
+                },
+            })
+        # Reinforce the URL list at the end so the model can cross-check.
+        content.append({
+            "type": "text",
+            "text": "URLs to classify (every one must appear in the response):\n"
+                    + "\n".join(url_list_lines),
+        })
+
+        try:
+            result = _invoke(
+                content=content,
+                model_id=model_id,
+                region=region,
+                max_tokens=max_tokens,
+                label=f"marketing-imagery-batch{start // batch_size + 1}",
+            )
+            for item in result.get("images") or []:
+                if isinstance(item, dict) and item.get("url"):
+                    aggregated.append(item)
+        except Exception as e:  # pragma: no cover - per-batch failure
+            print(
+                f"  ! marketing-imagery batch {start // batch_size + 1} failed: {e}",
+                file=sys.stderr,
+            )
+
+    return {"images": aggregated}
+
+
 def extract_brand_essence(
     *,
     domain: str,

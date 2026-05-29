@@ -1061,6 +1061,98 @@ def consultancy_credits_page(
     return page_num + 1
 
 
+def photography_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    images: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Render a 'Photography' page: the brand's marketing imagery
+    organised by Bedrock-assigned category, each cell captioned with the
+    category + a short description.
+
+    Returns the next page number. If no marketing imagery was
+    classified, returns page_num unchanged (page is skipped)."""
+    marketing = (images or {}).get("marketing_imagery") or []
+    if not marketing:
+        return page_num
+
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    # Sort: lifestyle/product/context first (the categories most useful
+    # for ad references), then team/testimonial/other.
+    category_order = {
+        "lifestyle": 0, "product": 1, "context": 2,
+        "team": 3, "testimonial": 4, "decorative": 5, "other": 6,
+    }
+    items = sorted(
+        marketing,
+        key=lambda it: category_order.get(it.get("category") or "other", 9),
+    )[:6]
+
+    draw_page_chrome(c, "Photography", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Brand Photography",
+        "Real photography pulled from the site, categorised so designers and "
+        "the ad generator can pick the right shot for each campaign.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    cols = 3
+    cell_w = (PAGE_W - 2 * MARGIN - GUTTER * (cols - 1)) / cols
+    cell_h = 180
+    caption_h = 60
+
+    for i, item in enumerate(items):
+        row, col = divmod(i, cols)
+        x = MARGIN + col * (cell_w + GUTTER)
+        cy = y - row * (cell_h + caption_h + 24)
+
+        # Image tile (with faint border)
+        c.setStrokeColor(HexColor("#E0E0E0"))
+        c.setLineWidth(0.5)
+        c.rect(x, cy - cell_h, cell_w, cell_h, fill=0, stroke=1)
+        data = fetch_image(item.get("url") or "")
+        if data:
+            try:
+                img = ImageReader(io.BytesIO(data))
+                iw, ih = img.getSize()
+                scale = min(cell_w / iw, cell_h / ih)
+                dw, dh = iw * scale, ih * scale
+                c.drawImage(
+                    img,
+                    x + (cell_w - dw) / 2,
+                    cy - cell_h + (cell_h - dh) / 2,
+                    dw, dh, mask="auto",
+                )
+            except Exception as e:
+                print(f"  ! could not render marketing image {item.get('url')}: {e}", file=sys.stderr)
+
+        # Category pill
+        category = (item.get("category") or "other").upper()
+        pill_text_w = stringWidth(category, HEADER_FONT, 7)
+        pill_w = pill_text_w + 12
+        pill_y = cy - cell_h - 16
+        c.setFillColor(HexColor(primary_color))
+        c.roundRect(x, pill_y, pill_w, 14, 4, fill=1, stroke=0)
+        c.setFillColor(HexColor(contrasting_text(primary_color)))
+        c.setFont(HEADER_FONT, 7)
+        c.drawString(x + 6, pill_y + 4, category)
+
+        # Description
+        desc = item.get("description") or ""
+        c.setFillColor(HexColor("#333333"))
+        c.setFont(BODY_FONT, 9)
+        wrapped = wrap_text(desc, BODY_FONT, 9, cell_w)[:3]
+        for j, line in enumerate(wrapped):
+            c.drawString(x, pill_y - 14 - j * 11, line)
+
+    c.showPage()
+    return page_num + 1
+
+
 def favicon_page(c: canvas.Canvas, brand_name: str, brand: dict, page_num: int) -> None:
     favs = brand.get("favicons") or []
     draw_page_chrome(c, "Logos & Marks", page_num, brand_name)
@@ -1249,6 +1341,45 @@ def promote_favicons_to_supporting_marks(data: dict, classification: dict) -> No
               file=sys.stderr)
 
 
+def apply_marketing_imagery_to_data(data: dict, marketing: dict) -> None:
+    """Merge per-image marketing classifications into images.images[] and
+    keep a top-level images.marketing_imagery list (suitable_for_ads-only,
+    newest scoring first) so downstream tools don't need to refilter."""
+    items = (marketing or {}).get("images") or []
+    if not items:
+        return
+
+    by_url = {it.get("url"): it for it in items if it.get("url")}
+    images_section = data.setdefault("images", {})
+    imgs = images_section.setdefault("images", [])
+    for im in imgs:
+        m = by_url.get(im.get("url"))
+        if not m:
+            continue
+        if m.get("category"):
+            im["marketing_category"] = m["category"]
+        if m.get("description"):
+            im["marketing_description"] = m["description"]
+        if m.get("subjects"):
+            im["marketing_subjects"] = m["subjects"]
+        if "suitable_for_ads" in m:
+            im["suitable_for_ads"] = bool(m["suitable_for_ads"])
+
+    # Top-level summary for the ads-worker.
+    suitable = [
+        {
+            "url": m.get("url"),
+            "category": m.get("category"),
+            "description": m.get("description"),
+            "subjects": m.get("subjects") or [],
+        }
+        for m in items
+        if m.get("url") and m.get("suitable_for_ads")
+    ]
+    if suitable:
+        images_section["marketing_imagery"] = suitable
+
+
 def apply_bedrock_essence_to_data(data: dict, essence: dict) -> None:
     """Store the mission/services/strengths bundle under content.essence."""
     if not essence:
@@ -1413,6 +1544,44 @@ def main() -> None:
             except Exception as e:
                 print(f"  ! Bedrock asset pass failed ({e}); keeping prior roles.", file=sys.stderr)
 
+            # Pass 2b: marketing-imagery classification — categorise the
+            # site's photographic content (lifestyle / product / context
+            # / team / etc.) so designers see the brand's visual library
+            # at a glance, and so a downstream ad-generator can pick the
+            # most relevant real photo to reference.
+            try:
+                imgs = (data.get("images") or {}).get("images", [])
+                # Roles that tend to be photographs rather than UI chrome
+                # or trust marks. Skip anything already classified as a
+                # logo or supporting mark.
+                photo_roles = {"hero", "header", "content"}
+                excluded_roles = {
+                    "brand_primary", "brand_supporting", "customer_logo",
+                    "logo", "nav", "footer", "icon", "social",
+                }
+                photo_candidates = [
+                    im["url"] for im in imgs
+                    if im.get("url")
+                    and im.get("role") in photo_roles
+                    and im.get("role") not in excluded_roles
+                ][:30]
+                if photo_candidates:
+                    domain = data.get("domain") or urlparse(data.get("start_url") or "").netloc
+                    marketing = bedrock_brand.classify_marketing_imagery(
+                        photo_candidates, domain=domain,
+                        model_id=args.bedrock_model, region=args.bedrock_region,
+                    )
+                    classified = marketing.get("images") or []
+                    suitable = sum(1 for it in classified if it.get("suitable_for_ads"))
+                    print(
+                        f"  Bedrock marketing imagery: {len(classified)} classified, "
+                        f"{suitable} suitable for ads",
+                        file=sys.stderr,
+                    )
+                    apply_marketing_imagery_to_data(data, marketing)
+            except Exception as e:
+                print(f"  ! Bedrock marketing-imagery pass failed ({e}); skipping.", file=sys.stderr)
+
         # Pass 3: brand essence (mission / services / strengths) — text-only, no screenshots needed
         try:
             content = data.get("content") or {}
@@ -1488,6 +1657,10 @@ def main() -> None:
     next_page = logos_pages(c, brand_name, images, start_url, start_page=next_page,
                              primary_color=brand.get("primary_color") or "#111111")
     next_page = supporting_marks_page(c, brand_name, images, page_num=next_page)
+    next_page = photography_page(
+        c, brand_name, images, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
     favicon_page(c, brand_name, brand, page_num=next_page); next_page += 1
     consultancy_credits_page(
         c, brand_name,

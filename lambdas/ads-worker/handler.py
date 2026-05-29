@@ -125,24 +125,33 @@ SYSTEM_PROMPT = (
 
 
 COPY_INSTRUCTIONS = """
-You will receive: (a) a JSON brand summary, (b) the brand-guidelines
-PDF as an attached file, (c) optionally a sample-ad image as a style
-cue, (d) optionally user-supplied headline/body/CTA. Any of (c)/(d)
-may be empty.
+You will receive: (a) a JSON brand summary (including a
+`marketing_imagery` list of real photos pulled from the brand's
+site, each with a category and description), (b) the brand-
+guidelines PDF as an attached file, (c) optionally a sample-ad image
+as a style cue, (d) optionally user-supplied headline/body/CTA.
 
 Reply with EXACTLY this JSON object — no markdown, no commentary:
 
   {
-    "headline":     "<a strong short headline, max 6 words>",
-    "body":         "<1-2 sentence supporting copy>",
-    "cta":          "<2-4 word call to action>",
-    "image_prompt": "<a single detailed prompt for gpt-image-1>"
+    "headline":            "<a strong short headline, max 6 words>",
+    "body":                "<1-2 sentence supporting copy>",
+    "cta":                 "<2-4 word call to action>",
+    "reference_image_url": "<the url field of the best photo from "
+                           "brand_summary.marketing_imagery, or empty "
+                           "string if none fit the concept>",
+    "image_prompt":        "<a single detailed prompt for gpt-image-1>"
   }
 
 Rules:
 - If the user supplied any of headline/body/cta, copy them VERBATIM
   into the JSON (don't paraphrase). Fill the rest from the brand
   context — tone, mission, services, audience.
+- For `reference_image_url`: pick the marketing_imagery entry whose
+  `category` + `description` best matches the concept of the
+  headline/CTA. Prefer 'lifestyle' or 'context' for service-led ads,
+  'product' for product-led ads. Return the EXACT url string from
+  the list. If no entry is genuinely a good fit, return "" (empty).
 - The image_prompt must instruct gpt-image-1 to render:
     * the headline as LITERAL TEXT, spelled exactly the same;
     * the supporting copy as LITERAL TEXT;
@@ -153,6 +162,11 @@ Rules:
     * the brand's colour palette (state the primary + secondary hex
       values directly in the prompt);
     * a 1024x1024 Facebook-ready square composition.
+- If you chose a reference_image_url, instruct gpt-image-1 to
+  reproduce that scene faithfully — same setting, same lighting,
+  same subjects — but redrawn to fit the advert layout. Describe
+  the scene IN the image_prompt so the renderer has context even
+  if the reference image is lost in transit.
 - DO NOT invent a logo design. The renderer will receive the official
   logo PNG as a reference image — instruct it to reproduce that exact
   logo (matching the proportions and wordmark in the reference) in the
@@ -172,7 +186,8 @@ def _brand_summary(brand: dict) -> dict:
     typo = style.get("typography") or {}
     content = brand.get("content") or {}
     essence = content.get("essence") or {}
-    images = (brand.get("images") or {}).get("images") or []
+    images_block = brand.get("images") or {}
+    images = images_block.get("images") or []
 
     primary_logo = next(
         (im.get("url") for im in images if im.get("role") == "brand_primary"),
@@ -187,6 +202,10 @@ def _brand_summary(brand: dict) -> dict:
         or brand_id.get("brand_name")
         or brand.get("domain")
     )
+
+    # Marketing imagery — populated by the brand-worker's Bedrock pass.
+    # Each item: {url, category, description, subjects}.
+    marketing = images_block.get("marketing_imagery") or []
 
     return {
         "domain": brand.get("domain"),
@@ -206,6 +225,10 @@ def _brand_summary(brand: dict) -> dict:
         "primary_logo_url": primary_logo,
         "favicon_urls": favicons[:3],
         "contact": essence.get("contact_details"),
+        # Cap to the 12 best entries — token usage matters at gpt-5
+        # rates and the model only needs a representative sample to
+        # choose from.
+        "marketing_imagery": marketing[:12],
     }
 
 
@@ -289,17 +312,30 @@ def _draft_copy_and_prompt(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Step 2 — gpt-image-1 renders, with logo as reference if available
+# Step 2 — gpt-image-1 renders, with logo + (optional) brand photo as
+# reference images.
 # ─────────────────────────────────────────────────────────────────────
-def _render_image(prompt: str, logo_bytes: bytes | None) -> bytes:
+def _render_image(
+    prompt: str,
+    logo_bytes: bytes | None,
+    photo_bytes: bytes | None,
+) -> bytes:
     client = _openai()
+
+    refs: list[tuple[str, bytes, str]] = []
     if logo_bytes:
-        # Pass the official logo PNG as a reference image. With
-        # gpt-image-1, images.edit treats the input image as a visual
-        # reference the renderer should reproduce.
+        refs.append(("logo.png", logo_bytes, "image/png"))
+    if photo_bytes:
+        refs.append(("brand_photo.png", photo_bytes, "image/png"))
+
+    if refs:
+        # gpt-image-1's images.edit endpoint accepts a single image or
+        # an array; passing both the logo and a brand photo gives the
+        # renderer the exact mark plus a true-to-life scene to redraw.
+        image_arg = refs[0] if len(refs) == 1 else refs
         resp = client.images.edit(
             model=IMAGE_MODEL,
-            image=("logo.png", logo_bytes, "image/png"),
+            image=image_arg,
             prompt=prompt,
             size=IMAGE_SIZE,
             quality=IMAGE_QUALITY,
@@ -368,14 +404,39 @@ def handler(event, _context):
         drafted = _draft_copy_and_prompt(
             summary, pdf_bytes, headline, body, cta, sample_ad_url,
         )
+        ref_url = (drafted.get("reference_image_url") or "").strip()
         print(
             f"[ad {ad_id}] copy: headline={drafted['headline']!r} "
-            f"cta={drafted['cta']!r}",
+            f"cta={drafted['cta']!r} ref={ref_url or '(none)'}",
             file=sys.stderr,
         )
 
-        # ── 3. Render ──────────────────────────────────────────────
-        png_bytes = _render_image(drafted["image_prompt"], logo_bytes)
+        # ── 3. Fetch the picked brand photo, if any ────────────────
+        photo_bytes = None
+        if ref_url:
+            # Sanity-check: the model must pick from the supplied list,
+            # not invent a URL. Drop it silently if it cheated.
+            allowed = {
+                it.get("url") for it in (summary.get("marketing_imagery") or [])
+                if it.get("url")
+            }
+            if ref_url in allowed:
+                try:
+                    photo_bytes = _fetch_url(ref_url)
+                    print(
+                        f"[ad {ad_id}] fetched brand photo ({len(photo_bytes)} bytes)",
+                        file=sys.stderr,
+                    )
+                except Exception as e:
+                    print(f"[ad {ad_id}] brand-photo fetch failed ({e})", file=sys.stderr)
+            else:
+                print(
+                    f"[ad {ad_id}] reference_image_url not in marketing_imagery list — ignoring",
+                    file=sys.stderr,
+                )
+
+        # ── 4. Render ──────────────────────────────────────────────
+        png_bytes = _render_image(drafted["image_prompt"], logo_bytes, photo_bytes)
         print(f"[ad {ad_id}] rendered image ({len(png_bytes)} bytes)", file=sys.stderr)
 
         # ── 4. Persist ─────────────────────────────────────────────
