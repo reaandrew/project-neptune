@@ -125,6 +125,19 @@ export function getAdJob(adId: string): Promise<AdJob> {
   return request<AdJob>(`/ads/${encodeURIComponent(adId)}`);
 }
 
+export interface AdSummary {
+  adId: string;
+  brandJobId?: string;
+  status: AdJobStatus;
+  headline?: string;
+  createdAt?: string;
+}
+
+export function listAds(brandJobId?: string): Promise<{ ads: AdSummary[] }> {
+  const qs = brandJobId ? `?brandJobId=${encodeURIComponent(brandJobId)}` : '';
+  return request<{ ads: AdSummary[] }>(`/ads${qs}`);
+}
+
 
 export function redirectToLogin(): void {
   const returnTo = window.location.href;

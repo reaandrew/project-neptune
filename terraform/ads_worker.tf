@@ -212,6 +212,7 @@ locals {
   ads_lambda_dirs = {
     ads-create = "../lambdas/ads-create"
     ads-get    = "../lambdas/ads-get"
+    ads-list   = "../lambdas/ads-list"
   }
 }
 
@@ -256,6 +257,54 @@ resource "aws_lambda_function" "ads_create" {
   tags = {
     Project = "project-neptune"
   }
+}
+
+resource "aws_lambda_function" "ads_list" {
+  function_name    = "project-neptune-ads-list"
+  role             = aws_iam_role.lambda_exec.arn
+  runtime          = "provided.al2023"
+  handler          = "bootstrap"
+  architectures    = ["x86_64"]
+  filename         = data.archive_file.ads_lambda["ads-list"].output_path
+  source_code_hash = data.archive_file.ads_lambda["ads-list"].output_base64sha256
+  timeout          = 10
+  memory_size      = 128
+
+  environment {
+    variables = {
+      ADS_JOBS_TABLE = aws_dynamodb_table.ads_jobs.name
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.ads_lambda]
+
+  tags = {
+    Project = "project-neptune"
+  }
+}
+
+resource "aws_apigatewayv2_integration" "ads_list" {
+  api_id                 = aws_apigatewayv2_api.api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.ads_list.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "ads_list" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "GET /ads"
+  target             = "integrations/${aws_apigatewayv2_integration.ads_list.id}"
+  authorization_type = "CUSTOM"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "ads_list_invoke" {
+  statement_id  = "AllowAPIGatewayInvokeAdsList"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ads_list.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/GET/ads"
 }
 
 resource "aws_lambda_function" "ads_get" {

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,10 +9,33 @@
     min-height: 100%;
   }
   body {
-    background-image:
-      radial-gradient(1200px 600px at 20% -10%, rgba(14, 165, 233, 0.18) 0%, transparent 60%),
-      radial-gradient(900px 500px at 90% 10%, rgba(56, 189, 248, 0.12) 0%, transparent 60%);
-    background-color: #050912;
-    background-attachment: fixed;
+    background-color: #F5F2EC;
+    color: #111111;
+    font-feature-settings: 'ss01', 'cv02';
+  }
+  h1, h2, h3 {
+    font-family: 'Instrument Serif', Georgia, ui-serif, serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl bg-white border border-ink-300/30 shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.08)];
+  }
+  .panel-flush {
+    @apply rounded-2xl overflow-hidden border border-ink-300/30 shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.08)];
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-ink-900 px-5 py-2.5 text-sm font-medium text-paper hover:bg-ink-700 transition disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-full border border-ink-300 px-5 py-2.5 text-sm font-medium text-ink-900 hover:bg-paper-dark transition;
+  }
+  .input {
+    @apply w-full rounded-xl border border-ink-300/60 bg-white px-4 py-3 text-sm text-ink-900 placeholder:text-ink-500 focus:border-ink-900 focus:outline-none focus:ring-0;
+  }
+  .label {
+    @apply text-[11px] uppercase tracking-[0.18em] text-ink-500;
   }
 }

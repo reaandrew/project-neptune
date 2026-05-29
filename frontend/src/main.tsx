@@ -1,21 +1,24 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import './index.css';
 import { App } from './App';
-import { BrandGuidelinesPage } from './pages/BrandGuidelinesPage';
-import { BrandJobDetailPage } from './pages/BrandJobDetailPage';
-import { WelcomePage } from './pages/WelcomePage';
+import { BrandsListPage } from './pages/BrandsListPage';
+import { BrandRegisterPage } from './pages/BrandRegisterPage';
+import { BrandDetailPage } from './pages/BrandDetailPage';
+import { AdDetailPage } from './pages/AdDetailPage';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />}>
-          <Route index element={<WelcomePage />} />
-          <Route path="brand" element={<BrandGuidelinesPage />} />
-          <Route path="brand/:jobId" element={<BrandJobDetailPage />} />
+          <Route index element={<Navigate to="/brands" replace />} />
+          <Route path="brands" element={<BrandsListPage />} />
+          <Route path="brands/new" element={<BrandRegisterPage />} />
+          <Route path="brands/:jobId" element={<BrandDetailPage />} />
+          <Route path="brands/:jobId/ads/:adId" element={<AdDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
