@@ -73,8 +73,13 @@ export function BrandDetailPage() {
         }
       });
   };
+  // Poll ads every 5s while we're on a done brand — surfaces newly
+  // submitted ads + status flips without manual refresh.
   useEffect(() => {
-    if (job?.status === 'done') loadAds();
+    if (job?.status !== 'done') return;
+    loadAds();
+    const id = window.setInterval(loadAds, 5000);
+    return () => window.clearInterval(id);
   }, [job?.status, jobId]);
 
   const onRegenerate = async () => {
@@ -256,43 +261,19 @@ function DownloadsSidebar({
           Guidelines
         </div>
         <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-          The brand book + structured data. Download links expire after 15 minutes.
+          The complete brand book. Download link expires after 15 minutes.
         </p>
       </div>
-      <div className="space-y-2">
-        {job.pdfUrl && (
-          <a
-            href={job.pdfUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-primary w-full"
-          >
-            PDF
-          </a>
-        )}
-        <div className="flex gap-2">
-          {job.yamlUrl && (
-            <a
-              href={job.yamlUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-ghost flex-1 text-xs"
-            >
-              YAML
-            </a>
-          )}
-          {job.jsonUrl && (
-            <a
-              href={job.jsonUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-ghost flex-1 text-xs"
-            >
-              JSON
-            </a>
-          )}
-        </div>
-      </div>
+      {job.pdfUrl && (
+        <a
+          href={job.pdfUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-primary w-full"
+        >
+          Download PDF
+        </a>
+      )}
       <button
         onClick={onRegenerate}
         disabled={regenerating}
@@ -314,7 +295,6 @@ function AdsSection({
   ads: AdSummary[] | null;
   onRefresh: () => void;
 }) {
-  const navigate = useNavigate();
   const [headline, setHeadline] = useState('');
   const [body, setBody] = useState('');
   const [cta, setCta] = useState('');
@@ -329,7 +309,7 @@ function AdsSection({
     setError(null);
     setSubmitting(true);
     try {
-      const { adId } = await createAdJob({
+      await createAdJob({
         brandJobId,
         headline: headline.trim() || undefined,
         body: body.trim() || undefined,
@@ -337,7 +317,16 @@ function AdsSection({
         sampleAdUrl: sampleAdUrl.trim() || undefined,
         ...briefToPayload(brief),
       });
-      navigate(`/brands/${brandJobId}/ads/${adId}`);
+      // Stay on the page — the new ad will appear in the list as
+      // "Queued" on the next poll (within 5s, but we also refresh
+      // immediately so it's instant). Reset form for the next one.
+      setHeadline('');
+      setBody('');
+      setCta('');
+      setSampleAdUrl('');
+      setBrief(makeDefaultBrief());
+      setFormOpen(false);
+      onRefresh();
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         redirectToLogin();
