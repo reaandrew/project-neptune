@@ -159,9 +159,25 @@ def probe_site(
         out.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as pw:
+        # Lambda-specific Chromium launch args:
+        #   --no-sandbox          Lambda runs as root; the sandbox refuses.
+        #   --disable-dev-shm-usage  /dev/shm is tiny in Lambda.
+        #   --disable-gpu         no GPU available.
+        #   --single-process      avoid the multi-process model that
+        #                         Lambda's restricted process table
+        #                         doesn't handle cleanly.
+        #   --no-zygote           pairs with --single-process.
+        #   --disable-setuid-sandbox  belt-and-braces with --no-sandbox.
         browser = pw.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--single-process",
+                "--no-zygote",
+            ],
         )
         ctx = browser.new_context(viewport={"width": 1440, "height": 900})
 
