@@ -244,6 +244,7 @@ def cover_page(
     # Render the brand logo top-left if available. Many web logos are
     # transparent PNGs intended to sit on a coloured background, so this
     # usually composes fine on the brand-coloured cover.
+    logo_bottom_y = None
     if logo_url:
         data = fetch_image(logo_url)
         if data:
@@ -254,23 +255,28 @@ def cover_page(
                 max_h = 140
                 scale = min(max_w / iw, max_h / ih)
                 dw, dh = iw * scale, ih * scale
+                logo_bottom_y = PAGE_H - MARGIN - dh
                 c.drawImage(
-                    img, MARGIN, PAGE_H - MARGIN - dh,
+                    img, MARGIN, logo_bottom_y,
                     dw, dh, mask="auto",
                 )
             except Exception as e:
                 print(f"  ! could not render cover logo {logo_url}: {e}", file=sys.stderr)
 
+    # Year sits directly below the logo (or where the logo would have
+    # been if it failed to render).
+    c.setFillColor(HexColor(text_color))
+    year_y = (logo_bottom_y - 22) if logo_bottom_y else (PAGE_H - MARGIN - 22)
+    c.setFont(BODY_FONT, 14)
+    c.drawString(MARGIN, year_y, str(year))
+
     # Brand name + subtitle — shrink slightly when a screenshot is
     # squeezing the text column.
-    c.setFillColor(HexColor(text_color))
     name_size = 56 if have_screenshot else 64
     c.setFont(HEADER_FONT, name_size)
     c.drawString(MARGIN, PAGE_H / 2 - 30, brand_name)
     c.setFont(BODY_FONT, 22)
     c.drawString(MARGIN, PAGE_H / 2 - 66, "Brand Guidelines")
-    c.setFont(BODY_FONT, 14)
-    c.drawString(MARGIN, MARGIN, str(year))
 
     # Homepage screenshot panel, right side. PIL crop to the panel
     # aspect ratio so we fill the rectangle without distortion (a plain
