@@ -390,22 +390,37 @@ function AdsSection({
               <li key={a.adId}>
                 <Link
                   to={`/brands/${brandJobId}/ads/${a.adId}`}
-                  className="panel p-4 block hover:border-brand/30 hover:bg-ink-900/80 transition"
+                  className="panel-flush group block overflow-hidden hover:border-brand/30 transition"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="label flex items-center gap-2">
-                        <AdStatusDot status={a.status} />
-                        {adStatusLabel(a.status)}
+                  <div className="relative aspect-square w-full bg-ink-900 overflow-hidden">
+                    {a.imageUrl ? (
+                      <img
+                        src={a.imageUrl}
+                        alt={a.headline ?? ''}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition duration-500"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 grid place-items-center text-[10px] uppercase tracking-widest2 text-slate-600">
+                        {a.status === 'pending' && 'Queued…'}
+                        {a.status === 'running' && 'Rendering…'}
+                        {a.status === 'error' && 'Failed'}
+                        {!['pending', 'running', 'error'].includes(a.status) && '—'}
                       </div>
-                      <div className="text-base font-semibold text-slate-100 tracking-tight mt-1.5 line-clamp-2">
-                        {a.headline || '(awaiting copy)'}
-                      </div>
+                    )}
+                    <div className="absolute top-2 right-2 flex items-center gap-1.5 rounded-full bg-ink-950/80 backdrop-blur px-2 py-1 text-[9px] uppercase tracking-widest2 text-slate-200">
+                      <AdStatusDot status={a.status} />
+                      {adStatusLabel(a.status)}
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center justify-between text-[10px] text-slate-600">
-                    <span className="font-mono">{a.adId.slice(0, 8)}</span>
-                    <span>Open →</span>
+                  <div className="p-4 bg-ink-900/60">
+                    <div className="text-sm font-semibold text-slate-100 tracking-tight line-clamp-2 min-h-[2.5rem]">
+                      {a.headline || <span className="text-slate-500">(awaiting copy)</span>}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-[10px] text-slate-600">
+                      <span className="font-mono">{a.adId.slice(0, 8)}</span>
+                      <span className="group-hover:text-brand transition">Open →</span>
+                    </div>
                   </div>
                 </Link>
               </li>

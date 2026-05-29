@@ -152,6 +152,7 @@ export interface AdSummary {
   status: AdJobStatus;
   headline?: string;
   createdAt?: string;
+  imageUrl?: string;
 }
 
 export function listAds(brandJobId?: string): Promise<{ ads: AdSummary[] }> {

@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -18,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type adSummary struct {
@@ -26,6 +28,7 @@ type adSummary struct {
 	Status     string `json:"status"`
 	Headline   string `json:"headline,omitempty"`
 	CreatedAt  string `json:"createdAt,omitempty"`
+	ImageURL   string `json:"imageUrl,omitempty"`
 }
 
 type listResponse struct {
@@ -59,7 +62,8 @@ func sval(m map[string]ddbtypes.AttributeValue, k string) string {
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	jobsTable := os.Getenv("ADS_JOBS_TABLE")
-	if jobsTable == "" {
+	artifactsBucket := os.Getenv("ARTIFACTS_BUCKET")
+	if jobsTable == "" || artifactsBucket == "" {
 		return errResp(500, "service misconfigured"), nil
 	}
 
@@ -83,7 +87,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 
 	input := &dynamodb.ScanInput{
 		TableName:            aws.String(jobsTable),
-		ProjectionExpression: aws.String("ad_id, brand_job_id, #s, headline, created_at, subject"),
+		ProjectionExpression: aws.String("ad_id, brand_job_id, #s, headline, created_at, subject, image_key"),
 		ExpressionAttributeNames: map[string]string{
 			"#s": "status",
 		},
@@ -114,21 +118,48 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		}
 	}
 
-	ads := make([]adSummary, 0, len(items))
+	type pending struct {
+		summary  adSummary
+		imageKey string
+	}
+	rows := make([]pending, 0, len(items))
 	for _, it := range items {
-		ads = append(ads, adSummary{
-			AdID:       sval(it, "ad_id"),
-			BrandJobID: sval(it, "brand_job_id"),
-			Status:     sval(it, "status"),
-			Headline:   sval(it, "headline"),
-			CreatedAt:  sval(it, "created_at"),
+		rows = append(rows, pending{
+			summary: adSummary{
+				AdID:       sval(it, "ad_id"),
+				BrandJobID: sval(it, "brand_job_id"),
+				Status:     sval(it, "status"),
+				Headline:   sval(it, "headline"),
+				CreatedAt:  sval(it, "created_at"),
+			},
+			imageKey: sval(it, "image_key"),
 		})
 	}
-	sort.Slice(ads, func(i, j int) bool {
-		return ads[i].CreatedAt > ads[j].CreatedAt
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].summary.CreatedAt > rows[j].summary.CreatedAt
 	})
-	if len(ads) > 100 {
-		ads = ads[:100]
+	if len(rows) > 100 {
+		rows = rows[:100]
+	}
+
+	// Presign thumbnails for done ads. Capped at 100 above so the
+	// per-row sign cost is bounded.
+	s3Client := s3.NewFromConfig(awsCfg)
+	presigner := s3.NewPresignClient(s3Client)
+	ads := make([]adSummary, 0, len(rows))
+	for _, r := range rows {
+		if r.summary.Status == "done" && r.imageKey != "" {
+			pr, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+				Bucket: aws.String(artifactsBucket),
+				Key:    aws.String(r.imageKey),
+			}, s3.WithPresignExpires(15*time.Minute))
+			if err == nil {
+				r.summary.ImageURL = pr.URL
+			} else {
+				log.Printf("presign %s: %v", r.imageKey, err)
+			}
+		}
+		ads = append(ads, r.summary)
 	}
 
 	return jsonResp(200, listResponse{Ads: ads}), nil
