@@ -241,37 +241,44 @@ def cover_page(
     panel_w = PAGE_W * 0.45 if have_screenshot else 0
     text_w = PAGE_W - 2 * MARGIN - panel_w
 
-    # Render the brand logo top-left if available. Many web logos are
-    # transparent PNGs intended to sit on a coloured background, so this
-    # usually composes fine on the brand-coloured cover.
+    # Consultancy logo top-left: brand-guidelines books carry the
+    # consultancy mark on the cover, not the brand's own logo (the
+    # brand's mark is the centrepiece of the Logos & Marks pages later
+    # in the book).
     logo_bottom_y = None
-    if logo_url:
-        data = fetch_image(logo_url)
-        if data:
-            try:
-                img = ImageReader(io.BytesIO(data))
-                iw, ih = img.getSize()
-                max_w = min(320, text_w * 0.9)
-                max_h = 140
-                scale = min(max_w / iw, max_h / ih)
-                dw, dh = iw * scale, ih * scale
-                logo_bottom_y = PAGE_H - MARGIN - dh
-                c.drawImage(
-                    img, MARGIN, logo_bottom_y,
-                    dw, dh, mask="auto",
-                )
-            except Exception as e:
-                print(f"  ! could not render cover logo {logo_url}: {e}", file=sys.stderr)
+    consultancy_data = _get_cached_logo(consultancy_logo_url) if consultancy_logo_url else None
+    if consultancy_data:
+        try:
+            img = ImageReader(io.BytesIO(consultancy_data))
+            iw, ih = img.getSize()
+            target_h = 60
+            scale = target_h / ih
+            dw, dh = iw * scale, target_h
+            on_dark = (text_color == "#FFFFFF")
+            # The ARA mark is dark-on-transparent, so on a dark brand
+            # colour we drop it on a small white tile so it stays
+            # legible. On a light brand colour we draw it directly.
+            x = MARGIN
+            y = PAGE_H - MARGIN - dh
+            if on_dark:
+                pad_x = 10
+                pad_y = 8
+                c.setFillColor(white)
+                c.rect(x - pad_x, y - pad_y, dw + 2 * pad_x, dh + 2 * pad_y,
+                       fill=1, stroke=0)
+            c.drawImage(img, x, y, dw, dh, mask="auto")
+            logo_bottom_y = y - (8 if on_dark else 0)
+        except Exception as e:
+            print(f"  ! could not render cover consultancy logo: {e}", file=sys.stderr)
 
-    # Year sits directly below the logo (or where the logo would have
-    # been if it failed to render).
+    # Year sits directly below the consultancy logo.
     c.setFillColor(HexColor(text_color))
     year_y = (logo_bottom_y - 22) if logo_bottom_y else (PAGE_H - MARGIN - 22)
     c.setFont(BODY_FONT, 14)
     c.drawString(MARGIN, year_y, str(year))
 
-    # Brand name + subtitle — shrink slightly when a screenshot is
-    # squeezing the text column.
+    # Brand name + subtitle, centred vertically on the left panel.
+    # Shrink slightly when a screenshot is squeezing the text column.
     name_size = 56 if have_screenshot else 64
     c.setFont(HEADER_FONT, name_size)
     c.drawString(MARGIN, PAGE_H / 2 - 30, brand_name)
@@ -316,11 +323,8 @@ def cover_page(
                 file=sys.stderr,
             )
 
-    # Consultancy logo bottom-right (slightly larger than internal-page footer)
-    draw_consultancy_footer_logo(
-        c, consultancy_logo_url, consultancy_name,
-        target_h=26, on_dark=(contrasting_text(bg) == "#FFFFFF"),
-    )
+    # No bottom-right consultancy logo on the cover — it sits in the
+    # top-left now. Internal pages still carry it in the footer.
     c.showPage()
 
 
