@@ -225,6 +225,7 @@ def cover_page(
     year: int,
     brand_color: str | None = None,
     logo_url: str | None = None,
+    screenshot_path: str | None = None,
     consultancy_name: str = DEFAULT_CONSULTANCY_NAME,
     consultancy_logo_url: str | None = DEFAULT_CONSULTANCY_LOGO_URL,
 ) -> None:
@@ -233,6 +234,12 @@ def cover_page(
     c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
     text_color = contrasting_text(bg)
     c.setFillColor(HexColor(text_color))
+
+    # Reserve a panel on the right side for the homepage screenshot, if
+    # available. The text column on the left shrinks accordingly.
+    have_screenshot = bool(screenshot_path and Path(screenshot_path).exists())
+    panel_w = PAGE_W * 0.45 if have_screenshot else 0
+    text_w = PAGE_W - 2 * MARGIN - panel_w
 
     # Render the brand logo top-left if available. Many web logos are
     # transparent PNGs intended to sit on a coloured background, so this
@@ -243,7 +250,7 @@ def cover_page(
             try:
                 img = ImageReader(io.BytesIO(data))
                 iw, ih = img.getSize()
-                max_w = 320
+                max_w = min(320, text_w * 0.9)
                 max_h = 140
                 scale = min(max_w / iw, max_h / ih)
                 dw, dh = iw * scale, ih * scale
@@ -254,12 +261,55 @@ def cover_page(
             except Exception as e:
                 print(f"  ! could not render cover logo {logo_url}: {e}", file=sys.stderr)
 
-    c.setFont(HEADER_FONT, 64)
+    # Brand name + subtitle — shrink slightly when a screenshot is
+    # squeezing the text column.
+    c.setFillColor(HexColor(text_color))
+    name_size = 56 if have_screenshot else 64
+    c.setFont(HEADER_FONT, name_size)
     c.drawString(MARGIN, PAGE_H / 2 - 30, brand_name)
     c.setFont(BODY_FONT, 22)
     c.drawString(MARGIN, PAGE_H / 2 - 66, "Brand Guidelines")
     c.setFont(BODY_FONT, 14)
     c.drawString(MARGIN, MARGIN, str(year))
+
+    # Homepage screenshot panel, right side. PIL crop to the panel
+    # aspect ratio so we fill the rectangle without distortion (a plain
+    # drawImage would either letterbox or stretch).
+    if have_screenshot:
+        try:
+            from PIL import Image
+            panel_x = PAGE_W - panel_w
+            panel_y = 0
+            panel_h = PAGE_H
+            target_ratio = panel_w / panel_h
+            with Image.open(screenshot_path) as im:
+                im = im.convert("RGB")
+                iw, ih = im.size
+                src_ratio = iw / ih
+                if src_ratio > target_ratio:
+                    # Source wider than panel — crop sides, keep centre.
+                    new_w = int(ih * target_ratio)
+                    left = (iw - new_w) // 2
+                    im = im.crop((left, 0, left + new_w, ih))
+                else:
+                    # Source taller than panel — crop bottom, keep top
+                    # (above-the-fold is the most representative part).
+                    new_h = int(iw / target_ratio)
+                    im = im.crop((0, 0, iw, new_h))
+                buf = io.BytesIO()
+                im.save(buf, format="PNG")
+                buf.seek(0)
+                c.drawImage(
+                    ImageReader(buf),
+                    panel_x, panel_y, panel_w, panel_h,
+                    mask="auto",
+                )
+        except Exception as e:
+            print(
+                f"  ! could not render cover screenshot {screenshot_path}: {e}",
+                file=sys.stderr,
+            )
+
     # Consultancy logo bottom-right (slightly larger than internal-page footer)
     draw_consultancy_footer_logo(
         c, consultancy_logo_url, consultancy_name,
@@ -1086,20 +1136,23 @@ def photography_page(
     page_num: int,
     primary_color: str = "#111111",
 ) -> int:
-    """Render a 'Photography' page: the brand's marketing imagery
-    organised by Bedrock-assigned category, each cell captioned with the
-    category + a short description.
+    """Render the brand's marketing imagery across as many slides as
+    needed — one centred row of up to 3 large images per slide, each
+    captioned with a category pill + description.
 
+    Cells are sized to fill the available vertical budget so the
+    photos read large; we just add more slides rather than shrinking.
     Returns the next page number. If no marketing imagery was
-    classified, returns page_num unchanged (page is skipped)."""
+    classified, returns page_num unchanged."""
     marketing = (images or {}).get("marketing_imagery") or []
     if not marketing:
         return page_num
 
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    # Sort: lifestyle/product/context first (the categories most useful
-    # for ad references), then team/testimonial/other.
+    # Sort: lifestyle/product/context first (most useful for ads), then
+    # team/testimonial/etc. Cap at 12 photos = max 4 photography slides
+    # so the brand book doesn't bloat for image-heavy sites.
     category_order = {
         "lifestyle": 0, "product": 1, "context": 2,
         "team": 3, "testimonial": 4, "decorative": 5, "other": 6,
@@ -1107,87 +1160,102 @@ def photography_page(
     items = sorted(
         marketing,
         key=lambda it: category_order.get(it.get("category") or "other", 9),
-    )[:6]
-
-    draw_page_chrome(c, "Photography", page_num, brand_name)
-    y = draw_section_title(
-        c,
-        "Brand Photography",
-        "Real photography pulled from the site, categorised so designers and "
-        "the ad generator can pick the right shot for each campaign.",
-        PAGE_H - MARGIN - 30,
-    )
+    )[:12]
 
     cols = 3
     cell_w = (PAGE_W - 2 * MARGIN - GUTTER * (cols - 1)) / cols
 
-    # Vertical budget on landscape A4: PAGE_H (~595) minus top margin,
-    # title block (~80), and a footer reservation of ~60 leaves about
-    # 400pt for two rows of cells. Each row = image + pill + 2 lines of
-    # description + spacing.
+    # Caption layout (per cell, below the image).
     pill_h = 14
-    desc_lines = 2
+    desc_lines = 3
     desc_line_h = 11
-    caption_block = 8 + pill_h + 4 + desc_lines * desc_line_h  # gap + pill + gap + lines
-    inter_row_gap = 12
-    cell_h = 140
-    row_pitch = cell_h + caption_block + inter_row_gap
+    caption_block = 10 + pill_h + 6 + desc_lines * desc_line_h
+    footer_band = 50  # safe space above the page-chrome footer
+    image_caption_gap = 10
 
-    # Reserve room above the footer (the page chrome footer sits ~30pt
-    # above the page bottom). Refuse to render anything that would fall
-    # into the footer band.
-    bottom_safe = MARGIN + 40
+    # Paginate: 3 photos per slide.
+    pages_used = 0
+    for page_start in range(0, len(items), cols):
+        slice_items = items[page_start : page_start + cols]
+        n = len(slice_items)
 
-    for i, item in enumerate(items):
-        row, col = divmod(i, cols)
-        x = MARGIN + col * (cell_w + GUTTER)
-        cy = y - row * row_pitch
+        total_slides = (len(items) + cols - 1) // cols
+        draw_page_chrome(c, "Photography", page_num + pages_used, brand_name)
+        y = draw_section_title(
+            c,
+            (
+                f"Brand Photography ({pages_used + 1} of {total_slides})"
+                if total_slides > 1 else "Brand Photography"
+            ),
+            "Real photography pulled from the site, categorised so designers "
+            "and the ad generator can pick the right shot for each campaign.",
+            PAGE_H - MARGIN - 30,
+        )
 
-        # Skip this cell entirely if it would intersect the footer.
-        if cy - cell_h - caption_block < bottom_safe:
+        # All remaining vertical space goes to the image cell (caption
+        # block reserved beneath).
+        cell_h = y - MARGIN - footer_band - caption_block - image_caption_gap
+        if cell_h < 100:
+            # Defensive: if the title block left almost nothing, skip.
+            c.showPage()
+            pages_used += 1
             continue
 
-        # Image tile (with faint border)
-        c.setStrokeColor(HexColor("#E0E0E0"))
-        c.setLineWidth(0.5)
-        c.rect(x, cy - cell_h, cell_w, cell_h, fill=0, stroke=1)
-        data = fetch_image(item.get("url") or "")
-        if data:
-            try:
-                img = ImageReader(io.BytesIO(data))
-                iw, ih = img.getSize()
-                scale = min(cell_w / iw, cell_h / ih)
-                dw, dh = iw * scale, ih * scale
-                c.drawImage(
-                    img,
-                    x + (cell_w - dw) / 2,
-                    cy - cell_h + (cell_h - dh) / 2,
-                    dw, dh, mask="auto",
-                )
-            except Exception as e:
-                print(f"  ! could not render marketing image {item.get('url')}: {e}", file=sys.stderr)
+        # Horizontally centre rows with fewer than `cols` cells so the
+        # last (possibly short) row balances visually.
+        row_w = n * cell_w + (n - 1) * GUTTER
+        start_x = (PAGE_W - row_w) / 2
 
-        # Category pill — sits just below the image tile.
-        category = (item.get("category") or "other").upper()
-        pill_text_w = stringWidth(category, HEADER_FONT, 7)
-        pill_w = pill_text_w + 12
-        pill_y = cy - cell_h - 8 - pill_h  # 8pt gap from image bottom
-        c.setFillColor(HexColor(primary_color))
-        c.roundRect(x, pill_y, pill_w, pill_h, 4, fill=1, stroke=0)
-        c.setFillColor(HexColor(contrasting_text(primary_color)))
-        c.setFont(HEADER_FONT, 7)
-        c.drawString(x + 6, pill_y + 4, category)
+        for i, item in enumerate(slice_items):
+            x = start_x + i * (cell_w + GUTTER)
+            cy = y  # top of cell
 
-        # Description — capped at 2 lines so the cell stays in budget.
-        desc = item.get("description") or ""
-        c.setFillColor(HexColor("#333333"))
-        c.setFont(BODY_FONT, 9)
-        wrapped = wrap_text(desc, BODY_FONT, 9, cell_w)[:desc_lines]
-        for j, line in enumerate(wrapped):
-            c.drawString(x, pill_y - 4 - (j + 1) * desc_line_h, line)
+            # Image tile
+            c.setStrokeColor(HexColor("#E0E0E0"))
+            c.setLineWidth(0.5)
+            c.rect(x, cy - cell_h, cell_w, cell_h, fill=0, stroke=1)
+            data = fetch_image(item.get("url") or "")
+            if data:
+                try:
+                    img = ImageReader(io.BytesIO(data))
+                    iw, ih = img.getSize()
+                    scale = min(cell_w / iw, cell_h / ih)
+                    dw, dh = iw * scale, ih * scale
+                    c.drawImage(
+                        img,
+                        x + (cell_w - dw) / 2,
+                        cy - cell_h + (cell_h - dh) / 2,
+                        dw, dh, mask="auto",
+                    )
+                except Exception as e:
+                    print(
+                        f"  ! could not render marketing image {item.get('url')}: {e}",
+                        file=sys.stderr,
+                    )
 
-    c.showPage()
-    return page_num + 1
+            # Category pill, below image
+            category = (item.get("category") or "other").upper()
+            pill_text_w = stringWidth(category, HEADER_FONT, 7)
+            pill_w = pill_text_w + 12
+            pill_y = cy - cell_h - image_caption_gap - pill_h
+            c.setFillColor(HexColor(primary_color))
+            c.roundRect(x, pill_y, pill_w, pill_h, 4, fill=1, stroke=0)
+            c.setFillColor(HexColor(contrasting_text(primary_color)))
+            c.setFont(HEADER_FONT, 7)
+            c.drawString(x + 6, pill_y + 4, category)
+
+            # Description, below pill
+            desc = item.get("description") or ""
+            c.setFillColor(HexColor("#333333"))
+            c.setFont(BODY_FONT, 9)
+            wrapped = wrap_text(desc, BODY_FONT, 9, cell_w)[:desc_lines]
+            for j, line in enumerate(wrapped):
+                c.drawString(x, pill_y - 6 - (j + 1) * desc_line_h, line)
+
+        c.showPage()
+        pages_used += 1
+
+    return page_num + pages_used
 
 
 def favicon_page(c: canvas.Canvas, brand_name: str, brand: dict, page_num: int) -> None:
@@ -1678,8 +1746,16 @@ def main() -> None:
                 cover_logo_url = im.get("url")
                 break
 
+    # Cover screenshot — the homepage above-the-fold capture from the
+    # Playwright probe. Falls through quietly if Playwright failed.
+    cover_screenshot = None
+    home_fold = Path(args.screenshot_dir) / "01_home_fold.png"
+    if home_fold.exists():
+        cover_screenshot = str(home_fold)
+
     cover_page(c, brand_name, args.year, brand_color=brand.get("primary_color"),
-               logo_url=cover_logo_url, consultancy_name=args.consultancy_name,
+               logo_url=cover_logo_url, screenshot_path=cover_screenshot,
+               consultancy_name=args.consultancy_name,
                consultancy_logo_url=args.consultancy_logo_url)
     about_page(c, brand_name, blurb, page_num=2)
     next_page = 3
