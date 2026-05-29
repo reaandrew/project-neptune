@@ -1544,43 +1544,45 @@ def main() -> None:
             except Exception as e:
                 print(f"  ! Bedrock asset pass failed ({e}); keeping prior roles.", file=sys.stderr)
 
-            # Pass 2b: marketing-imagery classification — categorise the
-            # site's photographic content (lifestyle / product / context
-            # / team / etc.) so designers see the brand's visual library
-            # at a glance, and so a downstream ad-generator can pick the
-            # most relevant real photo to reference.
-            try:
-                imgs = (data.get("images") or {}).get("images", [])
-                # Roles that tend to be photographs rather than UI chrome
-                # or trust marks. Skip anything already classified as a
-                # logo or supporting mark.
-                photo_roles = {"hero", "header", "content"}
-                excluded_roles = {
-                    "brand_primary", "brand_supporting", "customer_logo",
-                    "logo", "nav", "footer", "icon", "social",
-                }
-                photo_candidates = [
-                    im["url"] for im in imgs
-                    if im.get("url")
-                    and im.get("role") in photo_roles
-                    and im.get("role") not in excluded_roles
-                ][:30]
-                if photo_candidates:
-                    domain = data.get("domain") or urlparse(data.get("start_url") or "").netloc
-                    marketing = bedrock_brand.classify_marketing_imagery(
-                        photo_candidates, domain=domain,
-                        model_id=args.bedrock_model, region=args.bedrock_region,
-                    )
-                    classified = marketing.get("images") or []
-                    suitable = sum(1 for it in classified if it.get("suitable_for_ads"))
-                    print(
-                        f"  Bedrock marketing imagery: {len(classified)} classified, "
-                        f"{suitable} suitable for ads",
-                        file=sys.stderr,
-                    )
-                    apply_marketing_imagery_to_data(data, marketing)
-            except Exception as e:
-                print(f"  ! Bedrock marketing-imagery pass failed ({e}); skipping.", file=sys.stderr)
+        # Pass 2b: marketing-imagery classification — runs OUTSIDE the
+        # `if screenshots:` block because it only needs the candidate
+        # image URLs (the model gets the pixel bytes per-image, not the
+        # site-level screenshots). This pass still works even if
+        # Playwright/Chromium failed earlier.
+        try:
+            imgs = (data.get("images") or {}).get("images", [])
+            photo_roles = {"hero", "header", "content"}
+            excluded_roles = {
+                "brand_primary", "brand_supporting", "customer_logo",
+                "logo", "nav", "footer", "icon", "social",
+            }
+            photo_candidates = [
+                im["url"] for im in imgs
+                if im.get("url")
+                and im.get("role") in photo_roles
+                and im.get("role") not in excluded_roles
+            ][:30]
+            if photo_candidates:
+                domain = data.get("domain") or urlparse(data.get("start_url") or "").netloc
+                marketing = bedrock_brand.classify_marketing_imagery(
+                    photo_candidates, domain=domain,
+                    model_id=args.bedrock_model, region=args.bedrock_region,
+                )
+                classified = marketing.get("images") or []
+                suitable = sum(1 for it in classified if it.get("suitable_for_ads"))
+                print(
+                    f"  Bedrock marketing imagery: {len(classified)} classified, "
+                    f"{suitable} suitable for ads (from {len(photo_candidates)} candidates)",
+                    file=sys.stderr,
+                )
+                apply_marketing_imagery_to_data(data, marketing)
+            else:
+                print(
+                    "  Bedrock marketing imagery: no candidate photos found",
+                    file=sys.stderr,
+                )
+        except Exception as e:
+            print(f"  ! Bedrock marketing-imagery pass failed ({e}); skipping.", file=sys.stderr)
 
         # Pass 3: brand essence (mission / services / strengths) — text-only, no screenshots needed
         try:
