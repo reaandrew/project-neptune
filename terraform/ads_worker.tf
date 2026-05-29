@@ -156,6 +156,10 @@ resource "aws_iam_role_policy" "lambda_ads_jobs" {
           "dynamodb:PutItem",
           "dynamodb:GetItem",
           "dynamodb:UpdateItem",
+          # ads-list scans + filters by subject so the per-brand
+          # listing can paginate through the table.
+          "dynamodb:Query",
+          "dynamodb:Scan",
         ]
         Resource = aws_dynamodb_table.ads_jobs.arn
       },

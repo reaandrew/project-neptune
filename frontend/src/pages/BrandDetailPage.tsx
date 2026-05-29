@@ -1,11 +1,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import {
   AdSummary,
   BrandJob,
   createAdJob,
-  createBrandJob,
   getBrandJob,
   listAds,
   redirectToLogin,
@@ -22,11 +21,9 @@ const POLL_MS = 5000;
 
 export function BrandDetailPage() {
   const { jobId = '' } = useParams();
-  const navigate = useNavigate();
   const [job, setJob] = useState<BrandJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ads, setAds] = useState<AdSummary[] | null>(null);
-  const [regenerating, setRegenerating] = useState(false);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -82,23 +79,6 @@ export function BrandDetailPage() {
     return () => window.clearInterval(id);
   }, [job?.status, jobId]);
 
-  const onRegenerate = async () => {
-    if (!job?.url) return;
-    setRegenerating(true);
-    try {
-      const { jobId: newId } = await createBrandJob(job.url, { force: true });
-      navigate(`/brands/${newId}`);
-    } catch (err) {
-      if (err instanceof UnauthorizedError) {
-        redirectToLogin();
-        return;
-      }
-      setError(String((err as Error).message ?? err));
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
   // Only render a real title once we have something to show. Until the
   // first poll completes (or while the job is still pending and we
   // have no brand identity), we render a loading skeleton — never the
@@ -152,11 +132,7 @@ export function BrandDetailPage() {
             <AdsSection brandJobId={jobId} ads={ads} onRefresh={loadAds} />
           </div>
           <aside className="space-y-6 lg:sticky lg:top-24 self-start">
-            <DownloadsSidebar
-              job={job}
-              onRegenerate={onRegenerate}
-              regenerating={regenerating}
-            />
+            <DownloadsSidebar job={job} />
           </aside>
         </div>
       )}
@@ -244,15 +220,7 @@ function RunningCard({ label }: { label: string }) {
   );
 }
 
-function DownloadsSidebar({
-  job,
-  onRegenerate,
-  regenerating,
-}: {
-  job: BrandJob;
-  onRegenerate: () => void;
-  regenerating: boolean;
-}) {
+function DownloadsSidebar({ job }: { job: BrandJob }) {
   return (
     <div className="panel p-5 space-y-4">
       <div>
@@ -274,14 +242,6 @@ function DownloadsSidebar({
           Download PDF
         </a>
       )}
-      <button
-        onClick={onRegenerate}
-        disabled={regenerating}
-        className="w-full text-[11px] uppercase tracking-widest2 text-slate-500 hover:text-slate-200 disabled:opacity-40 pt-3 border-t border-white/5"
-        title="Re-runs the full pipeline (~$3)"
-      >
-        {regenerating ? 'Starting…' : 'Regenerate ↻'}
-      </button>
     </div>
   );
 }
