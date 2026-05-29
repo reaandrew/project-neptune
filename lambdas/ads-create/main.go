@@ -10,7 +10,13 @@
 //     "headline":   "...",       // optional
 //     "body":       "...",       // optional supporting copy
 //     "cta":        "...",       // optional call-to-action
-//     "sampleAdUrl":"https://..."// optional style reference
+//     "sampleAdUrl":"https://...",// optional style reference
+//     // Creative-brief dimensions — all optional, blank/empty == auto:
+//     "platform":   "facebook-feed",
+//     "objective":  "get-leads",
+//     "layout":     "single-hero",
+//     "angle":      "benefit-led",
+//     "elements":   ["logo","headline","cta","website"]
 //   }
 package main
 
@@ -36,11 +42,19 @@ import (
 )
 
 type requestBody struct {
-	BrandJobID  string `json:"brandJobId"`
-	Headline    string `json:"headline"`
-	Body        string `json:"body"`
-	CTA         string `json:"cta"`
-	SampleAdURL string `json:"sampleAdUrl"`
+	BrandJobID  string   `json:"brandJobId"`
+	Headline    string   `json:"headline"`
+	Body        string   `json:"body"`
+	CTA         string   `json:"cta"`
+	SampleAdURL string   `json:"sampleAdUrl"`
+	// Creative-brief dimensions. All optional — empty string means
+	// "auto / let the worker pick". `Elements` empty means use the
+	// worker's default mix (logo, headline, CTA, website).
+	Platform  string   `json:"platform"`
+	Objective string   `json:"objective"`
+	Layout    string   `json:"layout"`
+	Angle     string   `json:"angle"`
+	Elements  []string `json:"elements"`
 }
 
 func jsonResp(status int, body interface{}) events.APIGatewayV2HTTPResponse {
@@ -137,6 +151,30 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	if body.SampleAdURL != "" {
 		item["sample_ad_url"] = &ddbtypes.AttributeValueMemberS{Value: body.SampleAdURL}
 	}
+	if body.Platform != "" {
+		item["platform"] = &ddbtypes.AttributeValueMemberS{Value: body.Platform}
+	}
+	if body.Objective != "" {
+		item["objective"] = &ddbtypes.AttributeValueMemberS{Value: body.Objective}
+	}
+	if body.Layout != "" {
+		item["layout"] = &ddbtypes.AttributeValueMemberS{Value: body.Layout}
+	}
+	if body.Angle != "" {
+		item["angle"] = &ddbtypes.AttributeValueMemberS{Value: body.Angle}
+	}
+	if len(body.Elements) > 0 {
+		els := make([]ddbtypes.AttributeValue, 0, len(body.Elements))
+		for _, e := range body.Elements {
+			if e == "" {
+				continue
+			}
+			els = append(els, &ddbtypes.AttributeValueMemberS{Value: e})
+		}
+		if len(els) > 0 {
+			item["elements"] = &ddbtypes.AttributeValueMemberL{Value: els}
+		}
+	}
 
 	if _, err := ddb.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(jobsTable),
@@ -146,13 +184,18 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return errResp(500, "could not enqueue ad job"), nil
 	}
 
-	payload, _ := json.Marshal(map[string]string{
+	payload, _ := json.Marshal(map[string]any{
 		"adId":        adID,
 		"brandJobId":  body.BrandJobID,
 		"headline":    body.Headline,
 		"body":        body.Body,
 		"cta":         body.CTA,
 		"sampleAdUrl": body.SampleAdURL,
+		"platform":    body.Platform,
+		"objective":   body.Objective,
+		"layout":      body.Layout,
+		"angle":       body.Angle,
+		"elements":    body.Elements,
 	})
 	if _, err := lam.Invoke(ctx, &awslambda.InvokeInput{
 		FunctionName:   aws.String(workerFn),

@@ -8,6 +8,12 @@ import {
   redirectToLogin,
   UnauthorizedError,
 } from '../lib/api';
+import {
+  CreativeBrief,
+  RefineDrawer,
+  briefToPayload,
+  makeDefaultBrief,
+} from '../components/RefineDrawer';
 
 const POLL_MS = 5000;
 
@@ -152,6 +158,17 @@ function ResultCard({ ad }: { ad: AdJob }) {
             </div>
           )}
         </div>
+        {(ad.resolvedPlatform || ad.resolvedObjective || ad.resolvedLayout || ad.resolvedAngle) && (
+          <div className="panel p-5 space-y-2">
+            <div className="label">Creative brief</div>
+            <dl className="text-xs space-y-1.5 text-ink-700">
+              {ad.resolvedPlatform && <Row k="Platform" v={ad.resolvedPlatform} />}
+              {ad.resolvedObjective && <Row k="Objective" v={ad.resolvedObjective} />}
+              {ad.resolvedLayout && <Row k="Layout" v={ad.resolvedLayout} />}
+              {ad.resolvedAngle && <Row k="Angle" v={ad.resolvedAngle} />}
+            </dl>
+          </div>
+        )}
         {ad.imageUrl && (
           <a href={ad.imageUrl} target="_blank" rel="noreferrer" className="btn-primary w-full">
             Download PNG
@@ -175,6 +192,7 @@ function ReviseSection({
   const [body, setBody] = useState(currentAd.body ?? '');
   const [cta, setCta] = useState(currentAd.cta ?? '');
   const [sampleAdUrl, setSampleAdUrl] = useState('');
+  const [brief, setBrief] = useState<CreativeBrief>(() => makeDefaultBrief());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -196,6 +214,7 @@ function ReviseSection({
         body: body.trim() || undefined,
         cta: cta.trim() || undefined,
         sampleAdUrl: sampleAdUrl.trim() || undefined,
+        ...briefToPayload(brief),
       });
       onReviseStarted(adId);
     } catch (err) {
@@ -221,11 +240,14 @@ function ReviseSection({
           original stays put in the ad list.
         </p>
       </div>
-      <form onSubmit={onSubmit} className="panel p-6 space-y-3">
-        <Field label="Headline" value={headline} onChange={setHeadline} />
-        <Field label="Supporting copy" value={body} onChange={setBody} multiline />
-        <Field label="Call to action" value={cta} onChange={setCta} />
-        <Field label="Sample-ad URL (optional)" value={sampleAdUrl} onChange={setSampleAdUrl} placeholder="https://… layout style cue" />
+      <form onSubmit={onSubmit} className="panel p-6 space-y-4">
+        <RefineDrawer brief={brief} onChange={setBrief} />
+        <div className="space-y-3">
+          <Field label="Headline" value={headline} onChange={setHeadline} />
+          <Field label="Supporting copy" value={body} onChange={setBody} multiline />
+          <Field label="Call to action" value={cta} onChange={setCta} />
+          <Field label="Sample-ad URL (optional)" value={sampleAdUrl} onChange={setSampleAdUrl} placeholder="https://… layout style cue" />
+        </div>
         <div className="flex items-center justify-end">
           <button type="submit" disabled={submitting} className="btn-primary">
             {submitting ? 'Starting…' : 'Revise & regenerate'}
@@ -263,6 +285,15 @@ function Field({
         <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input" />
       )}
     </label>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <dt className="text-ink-500 w-20 shrink-0">{k}</dt>
+      <dd className="text-ink-900">{v}</dd>
+    </div>
   );
 }
 

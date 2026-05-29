@@ -11,6 +11,12 @@ import {
   redirectToLogin,
   UnauthorizedError,
 } from '../lib/api';
+import {
+  CreativeBrief,
+  RefineDrawer,
+  briefToPayload,
+  makeDefaultBrief,
+} from '../components/RefineDrawer';
 
 const POLL_MS = 5000;
 
@@ -226,6 +232,7 @@ function AdsSection({
   const [body, setBody] = useState('');
   const [cta, setCta] = useState('');
   const [sampleAdUrl, setSampleAdUrl] = useState('');
+  const [brief, setBrief] = useState<CreativeBrief>(() => makeDefaultBrief());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -240,6 +247,7 @@ function AdsSection({
         body: body.trim() || undefined,
         cta: cta.trim() || undefined,
         sampleAdUrl: sampleAdUrl.trim() || undefined,
+        ...briefToPayload(brief),
       });
       navigate(`/brands/${brandJobId}/ads/${adId}`);
     } catch (err) {
@@ -309,11 +317,20 @@ function AdsSection({
             site photo as reference.
           </p>
         </div>
-        <form onSubmit={onSubmit} className="space-y-3">
-          <Field label="Headline" value={headline} onChange={setHeadline} placeholder="Leave blank to auto-generate" />
-          <Field label="Supporting copy" value={body} onChange={setBody} multiline placeholder="Leave blank to auto-generate" />
-          <Field label="Call to action" value={cta} onChange={setCta} placeholder="Leave blank to auto-generate" />
-          <Field label="Sample-ad URL (optional)" value={sampleAdUrl} onChange={setSampleAdUrl} placeholder="https://… layout style cue" />
+        <form onSubmit={onSubmit} className="space-y-4">
+          <RefineDrawer brief={brief} onChange={setBrief} />
+          <details className="border border-ink-300/40 rounded-2xl bg-paper-dark/50">
+            <summary className="px-5 py-3 cursor-pointer text-sm text-ink-700 list-none flex items-center justify-between">
+              <span className="label">Lock the copy too (optional)</span>
+              <span className="text-xs text-ink-500">Open ▾</span>
+            </summary>
+            <div className="px-5 pb-5 pt-1 space-y-3">
+              <Field label="Headline" value={headline} onChange={setHeadline} placeholder="Leave blank to auto-generate" />
+              <Field label="Supporting copy" value={body} onChange={setBody} multiline placeholder="Leave blank to auto-generate" />
+              <Field label="Call to action" value={cta} onChange={setCta} placeholder="Leave blank to auto-generate" />
+              <Field label="Sample-ad URL" value={sampleAdUrl} onChange={setSampleAdUrl} placeholder="https://… layout style cue" />
+            </div>
+          </details>
           <div className="flex items-center justify-end">
             <button type="submit" disabled={submitting} className="btn-primary">
               {submitting ? 'Starting…' : 'Generate ad'}

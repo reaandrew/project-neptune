@@ -103,6 +103,13 @@ export interface AdJob {
   error?: string;
   createdAt?: string;
   completedAt?: string;
+  // Resolved creative brief (set by the worker once it has auto-picked
+  // anything the operator left blank). Surfaced so the operator can see
+  // what was actually used to generate the image.
+  resolvedPlatform?: string;
+  resolvedObjective?: string;
+  resolvedLayout?: string;
+  resolvedAngle?: string;
 }
 
 export interface CreateAdInput {
@@ -111,6 +118,12 @@ export interface CreateAdInput {
   body?: string;
   cta?: string;
   sampleAdUrl?: string;
+  // Creative-brief dimensions. All optional; empty string == auto.
+  platform?: string;
+  objective?: string;
+  layout?: string;
+  angle?: string;
+  elements?: string[];
 }
 
 export function createAdJob(input: CreateAdInput): Promise<{ adId: string }> {
