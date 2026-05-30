@@ -44,9 +44,19 @@ def canonical_image(url: str, root_apex: str) -> str:
     return urldefrag(url)[0]
 
 
-def iter_pages(start_url: str, max_pages: int = 200, timeout: int = DEFAULT_TIMEOUT,
-               user_agent: str = DEFAULT_USER_AGENT):
-    """BFS over apex domain. Yields (canonical_url, final_url, html, root_apex)."""
+def iter_pages(start_url: str, max_pages: int = 11, timeout: int = DEFAULT_TIMEOUT,
+               user_agent: str = DEFAULT_USER_AGENT,
+               first_page_links_only: bool = True):
+    """Yields (canonical_url, final_url, html, root_apex).
+
+    By default crawls the start URL plus up to (max_pages - 1) same-domain
+    links found ON the start page only. Secondary pages are NOT mined for
+    further links — this keeps the crawl bounded and predictable for the
+    brand-guidelines pipeline, which only needs a representative slice of
+    the site, not an exhaustive map.
+
+    Set first_page_links_only=False to restore the original full BFS
+    behaviour."""
     parsed = urlparse(start_url)
     if not parsed.scheme or not parsed.netloc:
         raise ValueError(f"Invalid URL: {start_url!r}")
@@ -57,6 +67,7 @@ def iter_pages(start_url: str, max_pages: int = 200, timeout: int = DEFAULT_TIME
 
     queue = deque([normalize(start_url)])
     visited: set[str] = set()
+    seen_first_page = False
 
     while queue and len(visited) < max_pages:
         url = queue.popleft()
@@ -79,6 +90,14 @@ def iter_pages(start_url: str, max_pages: int = 200, timeout: int = DEFAULT_TIME
 
         print(f"[ok]  {url}", file=sys.stderr)
         yield url, resp.url, resp.text, root_apex
+
+        # Only mine the homepage for links — secondary pages are
+        # crawled for their content only. Prevents the BFS from
+        # ballooning across the whole site (which the brand-guidelines
+        # job doesn't need: a representative slice is enough).
+        if first_page_links_only and seen_first_page:
+            continue
+        seen_first_page = True
 
         soup = BeautifulSoup(resp.text, "html.parser")
         for a in soup.find_all("a", href=True):

@@ -45,8 +45,7 @@ def _default_model_for_region(region: str) -> str:
 
 
 PROMPT = """You are looking at one or more screenshots of a brand's live website.
-Extract the brand identity exactly as a designer would perceive it on screen —
-not from CSS, but from what is visually dominant and meaningful.
+Extract the brand identity exactly as a designer would perceive it on screen.
 
 DOM HINTS (collected from computed styles — these are noisy and may be wrong;
 use as cross-reference only):
@@ -74,13 +73,26 @@ fences. Do not add commentary outside the JSON.
   "notes": "1-2 sentences on the visual identity"
 }}
 
-Rules:
-- Use only colours that are clearly visible in the screenshots.
+CRITICAL RULE — colour palette source:
+- The brand palette MUST come ONLY from the site's design system: header
+  background, navigation, buttons, link text, CTAs, headings, brand-coloured
+  borders, dividers, badges, footer chrome, and the page background itself.
+- DO NOT sample colours from photographs, hero images, product shots,
+  illustrations, stock photography, customer logos, or any embedded
+  image content. A bright orange jumper in a hero photo is NOT the brand's
+  accent colour; the orange "Book now" button across the site IS.
+- The DOM hints (computed styles from the actual DOM) are the most reliable
+  evidence of design-system colours. Cross-reference what you see in the
+  chrome against the hints — if they agree, lock that in.
+- If the only "vivid" colour on the page comes from photography, return a
+  muted/neutral palette that matches what the design system actually uses
+  rather than inventing a brand colour the site never wears.
+
+Other rules:
 - "secondary" must be a real brand colour, never a near-white surface like #F5F5F5.
 - "accent" is a sparing highlight (warnings, calls-to-attention), not a duplicate of primary.
 - "surface" is the page/panel background you see most often.
 - "color_names" should be evocative two-word names (e.g. "Atmosphere", "Ultra Green", "Peach Fury").
-- If a DOM hint matches what you see, prefer it. If it disagrees with the screenshot, trust the screenshot.
 """
 
 

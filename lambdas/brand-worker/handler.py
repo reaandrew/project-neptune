@@ -76,6 +76,10 @@ def handler(event, _context):
         "--save-yaml", str(yaml_path),
         "--screenshot-dir", str(screenshot_dir),
         "--bedrock-region", BEDROCK_REGION,
+        # Hard cap: homepage + 10 same-domain links found on it.
+        # Prevents giant sites from running the worker out to its
+        # 10-minute timeout.
+        "--max-pages", "11",
     ]
     # Add toolkit dir (this file's directory) to sys.path so the
     # modules import cleanly when running inside the Lambda container.
