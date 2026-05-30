@@ -126,13 +126,34 @@ ELEMENT_LABELS = {
 DEFAULT_ELEMENTS = ["logo", "headline", "cta", "website"]
 
 
-def _resolve_dimension(value: str, label_map: dict[str, str]) -> tuple[str, bool]:
-    """Return (human_label, was_auto). If value is empty or unknown,
-    pick a random key from the map."""
+def _resolve_dimension(value: str, label_map: dict[str, str]) -> tuple[str, str, bool]:
+    """Return (slug, human_label, was_auto). If value is empty or
+    unknown, pick a random key from the map."""
     if value and value in label_map:
-        return label_map[value], False
+        return value, label_map[value], False
     pick = random.choice(list(label_map.keys()))
-    return label_map[pick], True
+    return pick, label_map[pick], True
+
+
+# gpt-image-1 supports three sizes: 1024x1024 (square), 1024x1792
+# (portrait), 1792x1024 (landscape). Map the resolved platform slug
+# to the size that fits best. Defaults to square for unknown slugs.
+_PLATFORM_TO_SIZE: dict[str, str] = {
+    "facebook-feed":   "1024x1024",
+    "instagram-feed":  "1024x1024",
+    "instagram-story": "1024x1792",
+    "linkedin-post":   "1792x1024",
+    "tiktok-reel":     "1024x1792",
+    "google-display":  "1792x1024",
+    "website-banner":  "1792x1024",
+    "email-header":    "1792x1024",
+    "print-flyer":     "1024x1792",
+    "multi-platform":  "1024x1024",
+}
+
+
+def _image_size_for_platform(slug: str, default: str) -> str:
+    return _PLATFORM_TO_SIZE.get(slug, default)
 
 ARTIFACTS_BUCKET = os.environ["ARTIFACTS_BUCKET"]
 ADS_JOBS_TABLE = os.environ["ADS_JOBS_TABLE"]
@@ -186,31 +207,34 @@ def _set_status(ad_id: str, status: str, **extra: str) -> None:
 # System prompt — verbatim per project owner
 # ─────────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
-    "Create a branded Facebook advert image using the attached brand "
-    "guidelines as the sole reference for the brand identity. This is an "
-    "image creation task: generate a finished promotional advert image, "
-    "not just a concept or text layout. Use the exact approved company "
-    "logo from the attached brand guidelines or supplied logo asset. Do "
-    "not redesign, recreate, restyle, approximate, or invent a new logo. "
-    "The logo must match the official brand exactly in wording, "
-    "proportions, colours, spacing, and overall appearance.\n\n"
-    "Follow the brand guidelines closely for logo usage, colour palette, "
-    "typography, tone of voice, and visual style. Use real contextual "
-    "photography relevant to the business, and where appropriate, "
-    "realistically superimpose the exact official company logo onto "
-    "elements within the image such as signage, products, packaging, "
-    "vehicles, uniforms, equipment, or other real-world surfaces. The "
-    "logo should appear naturally integrated into the scene while "
-    "remaining fully accurate to the original brand asset.\n\n"
-    "Include a clear headline, concise supporting copy, key brand or "
-    "trust messages, and a strong call to action, all styled in line "
-    "with the attached brand guidelines. The final output should be a "
-    "polished, professional, on-brand Facebook advert image. If the "
-    "exact logo cannot be clearly reproduced from the attached "
-    "guidelines, use a clearly marked placeholder such as 'Insert "
-    "official logo here' instead of inventing a new one.\n\n"
-    "Render the photographic elements in a photorealistic style — they "
-    "should look like real photographs, not illustrations or 3D renders."
+    "Create a branded promotional advert image using the attached "
+    "brand guidelines as the sole reference for the brand identity. "
+    "This is an image creation task: generate a finished, ready-to-"
+    "publish advert image — not a concept board, not a text layout, "
+    "not a mockup with placeholder annotations.\n\n"
+    "The official company logo will be supplied separately as a "
+    "reference image. Reproduce that exact logo — match its wording, "
+    "proportions, colours, spacing, and overall appearance. Do not "
+    "redesign, restyle, approximate, or invent an alternative mark.\n\n"
+    "Follow the brand guidelines closely for logo placement, colour "
+    "palette, typography, tone of voice, and visual style. Use real "
+    "contextual photography relevant to the business, and where it "
+    "makes sense, naturally integrate the exact logo onto elements "
+    "within the scene — signage, vehicles, uniforms, equipment, "
+    "packaging — rendered as if photographed in situ.\n\n"
+    "Include a clear headline, concise supporting copy, key trust "
+    "messages, and a strong call to action, all typographically styled "
+    "in line with the brand. The final output should be a polished, "
+    "professional, on-brand advert sized for the platform specified in "
+    "the brief.\n\n"
+    "ABSOLUTELY DO NOT include placeholder text in the final image. "
+    "Never write 'Insert logo here', 'Logo placement', 'Brand mark', "
+    "'YOUR LOGO', 'Headline here', 'CTA button', or any other "
+    "instruction-style filler. If you genuinely cannot reproduce an "
+    "element from the supplied reference, omit it entirely — do not "
+    "annotate the omission.\n\n"
+    "Render photographic elements in a photorealistic style — real "
+    "photographs, not illustrations or 3D renders."
 )
 
 
@@ -272,7 +296,15 @@ Rules:
     * realistic photographic elements relevant to the business;
     * the brand's colour palette (state the primary + secondary hex
       values directly in the prompt);
-    * a 1024x1024 Facebook-ready square composition.
+    * a composition sized for the PLATFORM in the brief. Use square
+      (1:1) for Facebook/Instagram feed, vertical (9:16) for stories,
+      reels and TikTok, landscape (16:9) for website banners, LinkedIn
+      posts, Google display, email headers, and print flyers. NEVER
+      describe it as a "Facebook square" unless the platform is
+      facebook-feed or instagram-feed.
+- NEVER instruct the renderer to include placeholder text. The final
+  image must not contain words like "Insert logo here", "YOUR LOGO",
+  "Headline goes here", or any other annotation. Real content only.
 - If you chose a reference_image_url, instruct gpt-image-1 to
   reproduce that scene faithfully — same setting, same lighting,
   same subjects — but redrawn to fit the advert layout. Describe
@@ -456,6 +488,7 @@ def _render_image(
     prompt: str,
     logo_bytes: bytes | None,
     photo_bytes: bytes | None,
+    size: str = IMAGE_SIZE,
 ) -> bytes:
     client = _openai()
 
@@ -474,7 +507,7 @@ def _render_image(
             model=IMAGE_MODEL,
             image=image_arg,
             prompt=prompt,
-            size=IMAGE_SIZE,
+            size=size,
             quality=IMAGE_QUALITY,
             n=1,
         )
@@ -482,7 +515,7 @@ def _render_image(
         resp = client.images.generate(
             model=IMAGE_MODEL,
             prompt=prompt,
-            size=IMAGE_SIZE,
+            size=size,
             quality=IMAGE_QUALITY,
             n=1,
         )
@@ -521,12 +554,19 @@ def handler(event, _context):
         ELEMENT_LABELS[e] for e in raw_elements if e in ELEMENT_LABELS
     ] or [ELEMENT_LABELS[e] for e in DEFAULT_ELEMENTS]
     brief = {
-        "platform": platform,
-        "objective": objective,
-        "layout": layout,
-        "angle": angle,
+        # tuples become [slug, label, was_auto] in JSON — gpt-5 reads
+        # the label; humans can see if it was auto-picked.
+        "platform": [platform[0], platform[1], platform[2]],
+        "objective": [objective[0], objective[1], objective[2]],
+        "layout": [layout[0], layout[1], layout[2]],
+        "angle": [angle[0], angle[1], angle[2]],
         "elements": elements_labels,
     }
+
+    # Aspect ratio is driven by the resolved platform. Override the
+    # global IMAGE_SIZE for this job — a website banner can't be a
+    # square.
+    image_size = _image_size_for_platform(platform[0], IMAGE_SIZE)
 
     started_at = str(int(time.time()))
     _set_status(
@@ -534,10 +574,10 @@ def handler(event, _context):
         started_at=started_at,
         # Persist the resolved brief so the operator can see what was
         # actually used (especially what got auto-picked).
-        resolved_platform=platform[0],
-        resolved_objective=objective[0],
-        resolved_layout=layout[0],
-        resolved_angle=angle[0],
+        resolved_platform=platform[1],
+        resolved_objective=objective[1],
+        resolved_layout=layout[1],
+        resolved_angle=angle[1],
     )
 
     try:
@@ -604,7 +644,10 @@ def handler(event, _context):
                 )
 
         # ── 4. Render ──────────────────────────────────────────────
-        png_bytes = _render_image(drafted["image_prompt"], logo_bytes, photo_bytes)
+        png_bytes = _render_image(
+            drafted["image_prompt"], logo_bytes, photo_bytes,
+            size=image_size,
+        )
         print(f"[ad {ad_id}] rendered image ({len(png_bytes)} bytes)", file=sys.stderr)
 
         # ── 4. Persist ─────────────────────────────────────────────

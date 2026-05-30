@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
   AdJob,
+  AdSummary,
   createAdJob,
   getAdJob,
+  listAds,
   redirectToLogin,
   UnauthorizedError,
 } from '../lib/api';
@@ -22,7 +24,33 @@ export function AdDetailPage() {
   const navigate = useNavigate();
   const [ad, setAd] = useState<AdJob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [versions, setVersions] = useState<AdSummary[] | null>(null);
   const timerRef = useRef<number | null>(null);
+
+  // Poll sibling ads (all ads for this brand) so the version strip
+  // stays current as new revisions land.
+  useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+    const tick = () => {
+      listAds(jobId)
+        .then((res) => {
+          if (!cancelled) setVersions(res.ads);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          if (err instanceof UnauthorizedError) {
+            redirectToLogin();
+          }
+        });
+    };
+    tick();
+    const id = window.setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [jobId]);
 
   useEffect(() => {
     if (!adId) return;
@@ -78,6 +106,14 @@ export function AdDetailPage() {
           </div>
         </div>
       </div>
+
+      {versions && versions.length > 1 && (
+        <VersionsStrip
+          brandJobId={jobId}
+          currentAdId={adId}
+          versions={versions}
+        />
+      )}
 
       {error && (
         <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-300">
@@ -313,4 +349,80 @@ function statusLabel(status: string): string {
   if (status === 'pending') return 'Queued';
   if (status === 'error') return 'Failed';
   return status;
+}
+
+function VersionsStrip({
+  brandJobId,
+  currentAdId,
+  versions,
+}: {
+  brandJobId: string;
+  currentAdId: string;
+  versions: AdSummary[];
+}) {
+  // Most recent first — matches the order returned by the API.
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="label flex items-center gap-3">
+          <span className="accent-rule" />
+          Versions ({versions.length})
+        </div>
+        <Link
+          to={`/brands/${brandJobId}`}
+          className="text-[11px] uppercase tracking-widest2 text-slate-500 hover:text-slate-200"
+        >
+          All on brand →
+        </Link>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+        {versions.map((v) => {
+          const isCurrent = v.adId === currentAdId;
+          return (
+            <Link
+              key={v.adId}
+              to={`/brands/${brandJobId}/ads/${v.adId}`}
+              className={`shrink-0 w-32 panel-flush overflow-hidden transition group ${
+                isCurrent
+                  ? 'border-brand/70 shadow-[0_0_0_2px_rgba(34,211,238,0.25)]'
+                  : 'hover:border-brand/30'
+              }`}
+              aria-current={isCurrent ? 'page' : undefined}
+            >
+              <div className="relative aspect-square bg-ink-900">
+                {v.imageUrl ? (
+                  <img
+                    src={v.imageUrl}
+                    alt={v.headline ?? ''}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center text-[9px] uppercase tracking-widest2 text-slate-600">
+                    {v.status === 'pending' && 'Queued…'}
+                    {v.status === 'running' && 'Rendering…'}
+                    {v.status === 'error' && 'Failed'}
+                    {!['pending', 'running', 'error'].includes(v.status) && '—'}
+                  </div>
+                )}
+                {isCurrent && (
+                  <div className="absolute top-1.5 left-1.5 rounded-full bg-brand text-ink-950 px-2 py-0.5 text-[9px] uppercase tracking-widest2 font-semibold">
+                    Now
+                  </div>
+                )}
+              </div>
+              <div className="p-2 bg-ink-900/60">
+                <div className="text-[10px] line-clamp-2 text-slate-200 min-h-[2rem]">
+                  {v.headline || <span className="text-slate-600">(no copy)</span>}
+                </div>
+                <div className="mt-1 text-[9px] font-mono text-slate-600">
+                  {v.adId.slice(0, 6)}
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
