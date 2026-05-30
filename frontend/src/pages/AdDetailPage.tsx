@@ -12,10 +12,10 @@ import {
 } from '../lib/api';
 import {
   CreativeBrief,
-  RefineDrawer,
   briefToPayload,
   makeDefaultBrief,
 } from '../components/RefineDrawer';
+import { PlatformSelect } from '../components/PlatformSelect';
 
 const POLL_MS = 5000;
 
@@ -234,26 +234,15 @@ function Row({ k, v }: { k: string; v: string }) {
 
 function ReviseSection({
   brandJobId,
-  currentAd,
   onReviseStarted,
 }: {
   brandJobId: string;
   currentAd: AdJob;
   onReviseStarted: (adId: string) => void;
 }) {
-  const [headline, setHeadline] = useState(currentAd.headline ?? '');
-  const [body, setBody] = useState(currentAd.body ?? '');
-  const [cta, setCta] = useState(currentAd.cta ?? '');
-  const [sampleAdUrl, setSampleAdUrl] = useState('');
   const [brief, setBrief] = useState<CreativeBrief>(() => makeDefaultBrief());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setHeadline(currentAd.headline ?? '');
-    setBody(currentAd.body ?? '');
-    setCta(currentAd.cta ?? '');
-  }, [currentAd.adId]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -262,10 +251,6 @@ function ReviseSection({
     try {
       const { adId } = await createAdJob({
         brandJobId,
-        headline: headline.trim() || undefined,
-        body: body.trim() || undefined,
-        cta: cta.trim() || undefined,
-        sampleAdUrl: sampleAdUrl.trim() || undefined,
         ...briefToPayload(brief),
       });
       onReviseStarted(adId);
@@ -288,24 +273,22 @@ function ReviseSection({
           Revise
         </div>
         <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-100">
-          Tweak and <span className="text-brand">regenerate.</span>
+          Generate another <span className="text-brand">variant.</span>
         </h2>
         <p className="text-sm text-slate-400 mt-2 max-w-xl">
-          Edit the copy and submit — produces a new ad off the same brand. The
-          original stays put in the ads list.
+          Pick a platform (sets the aspect ratio) and submit. The copy is
+          auto-generated from your brand each time. The original ad stays put
+          in the versions strip above.
         </p>
       </div>
       <form onSubmit={onSubmit} className="panel-elevated p-6 space-y-5">
-        <RefineDrawer brief={brief} onChange={setBrief} />
-        <div className="space-y-3">
-          <Field label="Headline" value={headline} onChange={setHeadline} />
-          <Field label="Supporting copy" value={body} onChange={setBody} multiline />
-          <Field label="Call to action" value={cta} onChange={setCta} />
-          <Field label="Sample-ad URL (optional)" value={sampleAdUrl} onChange={setSampleAdUrl} placeholder="https://… layout style cue" />
-        </div>
+        <PlatformSelect
+          value={brief.platform}
+          onChange={(p) => setBrief({ ...brief, platform: p })}
+        />
         <div className="flex items-center justify-end pt-2 border-t border-white/5">
           <button type="submit" disabled={submitting} className="btn-primary">
-            {submitting ? 'Starting…' : 'Revise & regenerate →'}
+            {submitting ? 'Starting…' : 'Generate variant →'}
           </button>
         </div>
       </form>
@@ -315,31 +298,6 @@ function ReviseSection({
         </div>
       )}
     </section>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  multiline,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="label">{label}</span>
-      {multiline ? (
-        <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input" />
-      ) : (
-        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input" />
-      )}
-    </label>
   );
 }
 

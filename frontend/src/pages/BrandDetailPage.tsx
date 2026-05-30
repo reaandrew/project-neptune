@@ -12,10 +12,10 @@ import {
 } from '../lib/api';
 import {
   CreativeBrief,
-  RefineDrawer,
   briefToPayload,
   makeDefaultBrief,
 } from '../components/RefineDrawer';
+import { PlatformSelect } from '../components/PlatformSelect';
 
 const POLL_MS = 5000;
 
@@ -255,10 +255,8 @@ function AdsSection({
   ads: AdSummary[] | null;
   onRefresh: () => void;
 }) {
-  const [headline, setHeadline] = useState('');
-  const [body, setBody] = useState('');
-  const [cta, setCta] = useState('');
-  const [sampleAdUrl, setSampleAdUrl] = useState('');
+  // Only platform is operator-controlled for now; everything else is
+  // auto-picked by the worker. Copy is auto-generated from the brand.
   const [brief, setBrief] = useState<CreativeBrief>(() => makeDefaultBrief());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -271,19 +269,8 @@ function AdsSection({
     try {
       await createAdJob({
         brandJobId,
-        headline: headline.trim() || undefined,
-        body: body.trim() || undefined,
-        cta: cta.trim() || undefined,
-        sampleAdUrl: sampleAdUrl.trim() || undefined,
         ...briefToPayload(brief),
       });
-      // Stay on the page — the new ad will appear in the list as
-      // "Queued" on the next poll (within 5s, but we also refresh
-      // immediately so it's instant). Reset form for the next one.
-      setHeadline('');
-      setBody('');
-      setCta('');
-      setSampleAdUrl('');
       setBrief(makeDefaultBrief());
       setFormOpen(false);
       onRefresh();
@@ -333,40 +320,10 @@ function AdsSection({
 
       {formOpen && (
         <form onSubmit={onSubmit} className="panel-elevated p-6 space-y-5">
-          <RefineDrawer brief={brief} onChange={setBrief} />
-          <details className="border border-white/10 rounded-md bg-ink-900/40">
-            <summary className="px-4 py-3 cursor-pointer text-sm text-slate-300 list-none flex items-center justify-between">
-              <span className="label">Lock the copy too (optional)</span>
-              <span className="text-xs text-slate-500">Open ▾</span>
-            </summary>
-            <div className="px-4 pb-4 pt-1 space-y-3">
-              <Field
-                label="Headline"
-                value={headline}
-                onChange={setHeadline}
-                placeholder="Leave blank to auto-generate"
-              />
-              <Field
-                label="Supporting copy"
-                value={body}
-                onChange={setBody}
-                multiline
-                placeholder="Leave blank to auto-generate"
-              />
-              <Field
-                label="Call to action"
-                value={cta}
-                onChange={setCta}
-                placeholder="Leave blank to auto-generate"
-              />
-              <Field
-                label="Sample-ad URL"
-                value={sampleAdUrl}
-                onChange={setSampleAdUrl}
-                placeholder="https://… layout style cue"
-              />
-            </div>
-          </details>
+          <PlatformSelect
+            value={brief.platform}
+            onChange={(p) => setBrief({ ...brief, platform: p })}
+          />
           <div className="flex items-center justify-end pt-2 border-t border-white/5">
             <button type="submit" disabled={submitting} className="btn-primary">
               {submitting ? 'Starting…' : 'Generate ad →'}
@@ -435,43 +392,6 @@ function AdsSection({
         </div>
       )}
     </section>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  multiline,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="label">{label}</span>
-      {multiline ? (
-        <textarea
-          rows={3}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="input"
-        />
-      ) : (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="input"
-        />
-      )}
-    </label>
   );
 }
 
