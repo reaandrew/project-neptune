@@ -1560,10 +1560,95 @@ def favicon_page(c: canvas.Canvas, brand_name: str, brand: dict, page_num: int) 
     c.showPage()
 
 
+def _hex_norm(c: str | None) -> str | None:
+    if not c:
+        return None
+    c = c.strip().lstrip("#")
+    if len(c) == 3:
+        c = "".join(ch * 2 for ch in c)
+    if len(c) != 6:
+        return None
+    return "#" + c.lower()
+
+
+def _hex_distance(a: str, b: str) -> float:
+    """Squared RGB distance between two hex colours. ~0 = identical,
+    ~195000 = opposite corners of the colour cube."""
+    try:
+        ra, ga, ba = int(a[1:3], 16), int(a[3:5], 16), int(a[5:7], 16)
+        rb, gb, bb = int(b[1:3], 16), int(b[3:5], 16), int(b[5:7], 16)
+        return (ra - rb) ** 2 + (ga - gb) ** 2 + (ba - bb) ** 2
+    except Exception:
+        return 1e9
+
+
+def _css_colour_set(data: dict) -> set[str]:
+    """Every distinct hex colour the CSS analyser counted across the
+    actual chrome (after the Gutenberg-noise filter). Used to vet
+    Bedrock's accent pick — if the vision model invented a colour
+    that doesn't appear in the design system at all, it's almost
+    certainly from a photograph."""
+    style = data.get("style") or {}
+    out: set[str] = set()
+    # Brand-flagged colours from the analyser.
+    brand_block = style.get("brand") or {}
+    for k in ("primary_color", "secondary_color", "accent_color",
+              "surface_color", "text_color"):
+        v = _hex_norm(brand_block.get(k))
+        if v:
+            out.add(v)
+    # All tonal-palette stops.
+    palettes = (style.get("design_tokens") or {}).get("palettes") or {}
+    for ramp in palettes.values():
+        if isinstance(ramp, dict):
+            for c in ramp.values():
+                v = _hex_norm(c)
+                if v:
+                    out.add(v)
+        elif isinstance(ramp, list):
+            for c in ramp:
+                v = _hex_norm(c)
+                if v:
+                    out.add(v)
+    return out
+
+
 def apply_bedrock_to_data(data: dict, b: dict) -> None:
-    """Bedrock vision result is authoritative — overrides DOM-probe values."""
+    """Bedrock vision result is authoritative — overrides DOM-probe values.
+
+    Exception: if Bedrock's accent_color is nowhere to be found in the
+    CSS-extracted palette, it's almost certainly a colour sampled from
+    a photograph (lawn grass on a university campus, a bright jumper in
+    a lifestyle shot). Snap it back to primary in that case."""
     style = data.setdefault("style", {})
     brand = style.setdefault("brand", {})
+
+    # Vet accent BEFORE applying. The CSS set was just rebuilt with the
+    # noise filter, so anything we cross-reference here is from the
+    # actual design system.
+    bedrock_accent = _hex_norm(b.get("accent_color"))
+    if bedrock_accent:
+        css_set = _css_colour_set(data)
+        if css_set:
+            closest = min(
+                (c for c in css_set), key=lambda c: _hex_distance(bedrock_accent, c)
+            )
+            # 1500 ≈ ~12 RGB units per channel — within "same shade" range.
+            if _hex_distance(bedrock_accent, closest) > 1500:
+                print(
+                    f"  ! Bedrock accent {bedrock_accent} not present in CSS palette "
+                    f"(closest {closest}); snapping to primary",
+                    file=sys.stderr,
+                )
+                b = dict(b)
+                b["accent_color"] = b.get("primary_color") or bedrock_accent
+                # Drop the accent name too so we don't carry "Electric
+                # Lime" forward for a brand that has no electric lime.
+                if isinstance(b.get("color_names"), dict):
+                    names = dict(b["color_names"])
+                    names.pop("accent", None)
+                    b["color_names"] = names
+
     for k_src, k_dst in [
         ("primary_color", "primary_color"),
         ("secondary_color", "secondary_color"),

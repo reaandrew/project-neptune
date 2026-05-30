@@ -447,6 +447,12 @@ def parse_css(css_text: str, accum: dict):
     css_clean = FONTFACE_RE.sub("", css_text)
     css_clean = KEYFRAMES_RE.sub("", css_clean)
 
+    # Drop Gutenberg / WordPress preset utility-class rules — these
+    # ship in every WP site and pollute the palette with stock colours
+    # the brand never wears (e.g. .has-vivid-green-cyan-color {color:
+    # #00d084} on edgehill.ac.uk).
+    css_clean = strip_noise_rules(css_clean)
+
     generic_fonts = {
         "serif", "sans-serif", "monospace", "cursive", "fantasy",
         "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded",
@@ -555,6 +561,57 @@ NOISE_CSS_HINTS = (
 def is_noise_stylesheet(url: str) -> bool:
     low = url.lower()
     return any(hint in low for hint in NOISE_CSS_HINTS)
+
+
+# Selector substrings whose rule bodies we drop before tallying colours.
+# These all carry STOCK colour values that ship with the platform
+# regardless of whether the brand actually uses them — Gutenberg's
+# block-library presets are in every WordPress site's CSS even when
+# the brand never wears that colour. Counting them gives sites
+# entirely the wrong palette.
+NOISE_SELECTOR_HINTS = (
+    # Gutenberg preset utility classes — .has-vivid-green-cyan-color,
+    # .has-pale-pink-background-color, .has-luminous-vivid-orange-color,
+    # .has-light-green-cyan-color, .has-cyan-bluish-gray-color, the
+    # full preset palette. The corresponding gradient classes too.
+    ".has-vivid-",
+    ".has-pale-",
+    ".has-luminous-",
+    ".has-light-green-",
+    ".has-cyan-",
+    ".has-bluish-",
+    ".has-magenta-",
+    ".has-gradient",
+    # Gutenberg block-library scoped rules — block-internal preset
+    # decoration that bleeds into the tally on theme-bundled CSS.
+    ".wp-block-cover-",
+    ".wp-block-cover ",
+    ".wp-block-button__link",
+    # Some themes inline tailwind / utility classes that ship with
+    # full palettes (--tw-, ...) — covered when those vars are used
+    # rather than declared, but worth filtering when seen literally.
+    "--tw-",
+    "--wp--preset--",
+)
+
+_RULE_RE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.MULTILINE)
+
+
+def strip_noise_rules(css_text: str) -> str:
+    """Drop CSS rules whose selectors look like Gutenberg / WordPress
+    preset noise. These ship in every WP-powered site whether or not
+    the brand actually wears those colours.
+
+    Limitation: this is a flat regex, so rules nested inside @media or
+    @supports blocks aren't pre-filtered. Most preset declarations sit
+    at the top level so we catch the bulk of the noise."""
+    def keep(match: re.Match) -> str:
+        selector = match.group(1).lower()
+        for hint in NOISE_SELECTOR_HINTS:
+            if hint in selector:
+                return ""  # drop the whole rule
+        return match.group(0)
+    return _RULE_RE.sub(keep, css_text)
 
 
 def fetch_stylesheets(urls: set, session: requests.Session, timeout: int,

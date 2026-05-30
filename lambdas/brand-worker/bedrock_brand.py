@@ -79,18 +79,30 @@ CRITICAL RULE — colour palette source:
   borders, dividers, badges, footer chrome, and the page background itself.
 - DO NOT sample colours from photographs, hero images, product shots,
   illustrations, stock photography, customer logos, or any embedded
-  image content. A bright orange jumper in a hero photo is NOT the brand's
-  accent colour; the orange "Book now" button across the site IS.
+  image content. Concrete examples to ignore:
+    * Green grass, lush foliage, sports turf, or campus lawns in a
+      university/school hero shot — that is NOT the brand's accent.
+    * Blue sky, ocean, or sunset gradients in a photograph — NOT the brand.
+    * A bright orange jumper, T-shirt, or product in a lifestyle shot —
+      NOT the brand's accent. The orange "Book now" button IS.
+    * Skin tones, lipstick, eye colour — never brand colours.
 - The DOM hints (computed styles from the actual DOM) are the most reliable
   evidence of design-system colours. Cross-reference what you see in the
   chrome against the hints — if they agree, lock that in.
-- If the only "vivid" colour on the page comes from photography, return a
-  muted/neutral palette that matches what the design system actually uses
-  rather than inventing a brand colour the site never wears.
+
+CRITICAL RULE — accent colour discipline:
+- An "accent" must appear in AT LEAST TWO distinct UI elements (e.g. a
+  CTA button AND a link, or a badge AND a divider). One continuous
+  region of colour is NOT enough — that's almost always photography.
+- If you cannot find a colour that meets the "appears in 2+ distinct
+  UI elements" test, return the primary_color as the accent_color. It
+  is better to have a flat brand than to invent a vivid accent the site
+  doesn't actually wear.
+- If the only vivid colour on the page comes from photography, return a
+  muted/neutral palette that matches what the design system actually uses.
 
 Other rules:
 - "secondary" must be a real brand colour, never a near-white surface like #F5F5F5.
-- "accent" is a sparing highlight (warnings, calls-to-attention), not a duplicate of primary.
 - "surface" is the page/panel background you see most often.
 - "color_names" should be evocative two-word names (e.g. "Atmosphere", "Ultra Green", "Peach Fury").
 """
