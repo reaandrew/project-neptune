@@ -558,6 +558,91 @@ def classify_marketing_imagery(
     return {"images": aggregated}
 
 
+DESIGN_DNA_PROMPT = """You are a senior art director auditing a brand's
+visual identity from its live website. Your job is to extract the brand's
+*design DNA* — the constraints a designer at a top studio would use to
+keep new work consistent with the brand. This is the contract every ad,
+poster, brochure, or social post the brand ever produces should obey.
+
+BRAND CONTEXT (extracted upstream):
+{context_json}
+
+You are also looking at one or more screenshots of the live site.
+
+Return STRICT JSON with EXACTLY this shape, nothing else, no markdown:
+
+{{
+  "archetype": "<one of: editorial-restrained | bold-utilitarian | polished-corporate | playful-illustrated | luxury-typographic | tech-modern-gradient | handcrafted-warm | minimalist-monochrome | maximalist-magazine | photographic-cinematic>",
+  "archetype_rationale": "1 sentence on why this brand fits that archetype",
+  "density": "<airy | balanced | dense | maximalist>",
+  "typography": {{
+    "voice": "<short label — e.g. 'clean modern sans', 'editorial serif', 'mixed display + grotesque', 'condensed industrial'>",
+    "hierarchy": "<subtle | balanced | dramatic>",
+    "rules": "1-2 sentences describing how type should be set (size relationships, tracking, weight contrast)"
+  }},
+  "photography": {{
+    "treatment": "<short label — e.g. 'natural-lifestyle', 'studio-product', 'cinematic-graded', 'documentary', 'duotone', 'illustrated-only', 'mixed-media'>",
+    "subject_archetype": "<short label — e.g. 'people-in-action', 'product-front-and-centre', 'context-no-people', 'team-portrait', 'abstract-textures'>",
+    "rules": "1-2 sentences on how photos should be art-directed for this brand"
+  }},
+  "layout_preference": "<asymmetric-editorial | centred-symmetric | full-bleed-with-overlay | grid-modular | magazine-cover | card-stacked>",
+  "negative_space": "<restrained | balanced | dense>",
+  "reference_marks": ["3-5 well-known brands whose design language sits closest to this one (e.g. 'Patagonia', 'Aesop', 'Liquid Death', 'Linear', 'HSBC')"],
+  "voice_to_design": {{
+    "premium": "1 sentence rule — what 'premium' looks like for this brand specifically",
+    "urgent":  "1 sentence rule — what 'urgent' looks like for this brand specifically",
+    "playful": "1 sentence rule — what 'playful' looks like for this brand specifically",
+    "trust":   "1 sentence rule — what 'trust-led' looks like for this brand specifically"
+  }},
+  "do_not": ["3-5 concrete design moves this brand should NEVER use (e.g. 'neon gradients', 'comic-sans display', 'photography with heavy filters', 'centred type on busy backgrounds')"],
+  "notes": "1-2 sentences capturing the visual personality in your own words"
+}}
+
+Rules:
+- The archetype must be ONE of the 10 options. Pick the single best fit.
+- reference_marks must be real, well-known brands a designer would recognise.
+  If the brand is a small local business, pick the design-language-adjacent
+  household name (e.g. 'a skip-hire brand whose visuals lean closer to
+  Liquid Death than to a corporate consultancy').
+- voice_to_design rules must be CONCRETE design moves, not adjectives.
+  Bad: "feels premium". Good: "single hero photograph with 30% negative
+  space around the headline, no decorative elements".
+- do_not entries must be SPECIFIC visual moves, not categories. Bad:
+  "anything tacky". Good: "drop shadows on typography".
+"""
+
+
+def classify_design_dna(
+    screenshot_paths: list[str],
+    *,
+    brand_context: dict,
+    model_id: str | None = None,
+    region: str | None = None,
+    max_tokens: int = 3000,
+) -> dict[str, Any]:
+    """Extract the brand's *design DNA* — the visual contract every ad
+    produced for this brand should obey. Stored under
+    style.design_dna in the YAML and consumed by the ads-worker."""
+    if not screenshot_paths:
+        return {}
+
+    model_id, region = _resolve_model_and_region(model_id, region)
+    content: list[dict[str, Any]] = [_image_block(p) for p in screenshot_paths]
+    content.append({
+        "type": "text",
+        "text": DESIGN_DNA_PROMPT.format(
+            context_json=json.dumps(brand_context, indent=2, ensure_ascii=False),
+        ),
+    })
+    return _invoke(
+        content=content,
+        model_id=model_id,
+        region=region,
+        max_tokens=max_tokens,
+        label="design-dna",
+    )
+
+
 def extract_brand_essence(
     *,
     domain: str,

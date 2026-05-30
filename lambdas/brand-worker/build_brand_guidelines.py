@@ -511,6 +511,220 @@ def supporting_pages(
     return page
 
 
+def design_dna_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    design_dna: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Render the brand's design DNA — archetype, density, typographic
+    voice, photographic treatment, layout preference, reference marks,
+    voice-to-design rules and do-nots. Returns next page number.
+    Silently skipped (returns page_num unchanged) if no DNA is set."""
+    if not design_dna or not design_dna.get("archetype"):
+        return page_num
+
+    draw_page_chrome(c, "Design DNA", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Design DNA",
+        "The visual contract every piece of brand work should obey. Drives the ad generator and any future creative.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    accent = HexColor(primary_color)
+    text_on_accent = HexColor(contrasting_text(primary_color))
+    label_grey = HexColor("#666666")
+    body_grey = HexColor("#333333")
+
+    col_gap = GUTTER
+    col_w = (PAGE_W - 2 * MARGIN - col_gap) / 2
+    left_x = MARGIN
+    right_x = MARGIN + col_w + col_gap
+
+    # ── Top band: archetype hero (left) + density pill row (right) ─
+    archetype = design_dna.get("archetype") or ""
+    archetype_label = archetype.replace("-", " ").upper()
+    arch_box_h = 90
+
+    # Left: archetype hero block
+    c.setFillColor(accent)
+    c.rect(left_x, y - arch_box_h, col_w, arch_box_h, fill=1, stroke=0)
+    c.setFillColor(text_on_accent)
+    c.setFont(HEADER_FONT, 9)
+    c.drawString(left_x + 14, y - 18, "ARCHETYPE")
+    c.setFont(HEADER_FONT, 22)
+    # Wrap the archetype label if it's wider than the box.
+    arch_lines = wrap_text(archetype_label, HEADER_FONT, 22, col_w - 28)
+    for i, line in enumerate(arch_lines[:2]):
+        c.drawString(left_x + 14, y - 44 - i * 26, line)
+
+    # Right: rationale + meta meta meta
+    rationale = (design_dna.get("archetype_rationale") or "").strip()
+    c.setFillColor(label_grey)
+    c.setFont(HEADER_FONT, 9)
+    c.drawString(right_x, y - 18, "WHY THIS ARCHETYPE")
+    c.setFillColor(body_grey)
+    c.setFont(BODY_FONT, 10)
+    for i, line in enumerate(wrap_text(rationale, BODY_FONT, 10, col_w)[:4]):
+        c.drawString(right_x, y - 36 - i * 14, line)
+
+    # Meta strip below rationale.
+    meta_y = y - 96
+    metas = [
+        ("DENSITY", (design_dna.get("density") or "—").replace("-", " ")),
+        ("LAYOUT", (design_dna.get("layout_preference") or "—").replace("-", " ")),
+        ("WHITESPACE", (design_dna.get("negative_space") or "—").replace("-", " ")),
+    ]
+    cell_w = col_w / len(metas)
+    for i, (k, v) in enumerate(metas):
+        cx = right_x + i * cell_w
+        c.setFillColor(label_grey)
+        c.setFont(HEADER_FONT, 7)
+        c.drawString(cx, meta_y, k)
+        c.setFillColor(body_grey)
+        c.setFont(HEADER_FONT, 11)
+        c.drawString(cx, meta_y - 14, v.title())
+
+    y -= arch_box_h + 36
+
+    # ── Two-column grid: Typography | Photography ─────────────────
+    def detail_block(x: float, y_top: float, w: float, title: str, voice: str, sublabel: str, rules: str) -> float:
+        c.setFillColor(accent)
+        c.rect(x, y_top - 3, 6, 3, fill=1, stroke=0)
+        c.setFillColor(black)
+        c.setFont(HEADER_FONT, 11)
+        c.drawString(x, y_top - 18, title)
+        c.setFont(HEADER_FONT, 14)
+        c.drawString(x, y_top - 38, voice or "—")
+        c.setFillColor(label_grey)
+        c.setFont(BODY_FONT, 9)
+        c.drawString(x, y_top - 52, sublabel or "")
+        c.setFillColor(body_grey)
+        c.setFont(BODY_FONT, 10)
+        lines = wrap_text(rules or "", BODY_FONT, 10, w)[:4]
+        for i, line in enumerate(lines):
+            c.drawString(x, y_top - 72 - i * 14, line)
+        return y_top - 72 - max(1, len(lines)) * 14
+
+    typo = design_dna.get("typography") or {}
+    photo = design_dna.get("photography") or {}
+    typo_voice = (typo.get("voice") or "—").title()
+    typo_hier = (typo.get("hierarchy") or "—").title()
+    photo_treat = (photo.get("treatment") or "—").replace("-", " ").title()
+    photo_subj = (photo.get("subject_archetype") or "—").replace("-", " ").title()
+
+    bottom_left = detail_block(
+        left_x, y, col_w,
+        title="TYPOGRAPHY",
+        voice=typo_voice,
+        sublabel=f"Hierarchy · {typo_hier}",
+        rules=typo.get("rules") or "",
+    )
+    bottom_right = detail_block(
+        right_x, y, col_w,
+        title="PHOTOGRAPHY",
+        voice=photo_treat,
+        sublabel=f"Subject · {photo_subj}",
+        rules=photo.get("rules") or "",
+    )
+
+    y = min(bottom_left, bottom_right) - 26
+
+    # ── Reference marks row ───────────────────────────────────────
+    refs = design_dna.get("reference_marks") or []
+    if refs:
+        c.setFillColor(label_grey)
+        c.setFont(HEADER_FONT, 9)
+        c.drawString(MARGIN, y, "REFERENCE MARKS — DESIGN-LANGUAGE NEIGHBOURS")
+        y -= 4
+        x = MARGIN
+        pill_h = 22
+        c.setFont(BODY_FONT, 10)
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        for ref in refs[:6]:
+            w = stringWidth(ref, BODY_FONT, 10) + 18
+            if x + w > PAGE_W - MARGIN:
+                break
+            c.setFillColor(HexColor("#F2F2F2"))
+            c.setStrokeColor(HexColor("#E0E0E0"))
+            c.setLineWidth(0.5)
+            c.roundRect(x, y - pill_h - 6, w, pill_h, 4, fill=1, stroke=1)
+            c.setFillColor(black)
+            c.drawString(x + 9, y - pill_h + 1, ref)
+            x += w + 6
+        y -= pill_h + 18
+
+    c.showPage()
+    page_used = 1
+    next_page = page_num + page_used
+
+    # ── Page 2: Voice-to-design + Do-nots ─────────────────────────
+    vmap = design_dna.get("voice_to_design") or {}
+    donots = design_dna.get("do_not") or []
+    if not vmap and not donots:
+        return next_page
+
+    draw_page_chrome(c, "Design DNA", next_page, brand_name)
+    y = draw_section_title(
+        c,
+        "Voice to design",
+        "Concrete moves that translate the brand's voice into visual decisions.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    voice_rows = [
+        ("Premium", vmap.get("premium")),
+        ("Urgent",  vmap.get("urgent")),
+        ("Playful", vmap.get("playful")),
+        ("Trust",   vmap.get("trust")),
+    ]
+    label_w = 110
+    for label, rule in voice_rows:
+        if not rule:
+            continue
+        # Pill for the voice tag
+        c.setFillColor(accent)
+        c.rect(MARGIN, y - 18, label_w, 22, fill=1, stroke=0)
+        c.setFillColor(text_on_accent)
+        c.setFont(HEADER_FONT, 11)
+        c.drawString(MARGIN + 10, y - 12, label.upper())
+        # Rule text
+        c.setFillColor(body_grey)
+        c.setFont(BODY_FONT, 11)
+        lines = wrap_text(rule, BODY_FONT, 11, PAGE_W - 2 * MARGIN - label_w - 18)[:3]
+        for i, line in enumerate(lines):
+            c.drawString(MARGIN + label_w + 18, y - 12 - i * 14, line)
+        y -= max(1, len(lines)) * 14 + 18
+        if y < MARGIN + 180:
+            break
+
+    # Do-nots block
+    if donots:
+        y -= 14
+        c.setFillColor(HexColor("#B91C1C"))
+        c.setFont(HEADER_FONT, 11)
+        c.drawString(MARGIN, y, "DO NOT")
+        y -= 6
+        c.setStrokeColor(HexColor("#B91C1C"))
+        c.setLineWidth(1.5)
+        c.line(MARGIN, y, MARGIN + 60, y)
+        y -= 20
+        c.setFillColor(body_grey)
+        c.setFont(BODY_FONT, 11)
+        for entry in donots[:6]:
+            text = "× " + entry
+            for j, line in enumerate(wrap_text(text, BODY_FONT, 11, PAGE_W - 2 * MARGIN)[:2]):
+                c.drawString(MARGIN, y - j * 14, line)
+            y -= 14 * max(1, min(2, len(wrap_text(text, BODY_FONT, 11, PAGE_W - 2 * MARGIN)))) + 4
+            if y < MARGIN + 60:
+                break
+
+    c.showPage()
+    return next_page + 1
+
+
 def typography_page(c: canvas.Canvas, brand_name: str, typography: dict, page_num: int) -> None:
     draw_page_chrome(c, "Typography", page_num, brand_name)
     y = draw_section_title(c, "Typography", "Display typeface and type scale.", PAGE_H - MARGIN - 30)
@@ -1649,6 +1863,44 @@ def main() -> None:
             except Exception as e:
                 print(f"  ! Bedrock identity pass failed ({e}); keeping prior values.", file=sys.stderr)
 
+            # Pass 1b: Design DNA — the visual contract every ad
+            # should obey. Archetype + density + typography rules +
+            # photography treatment + layout preference + reference
+            # marks + voice-to-design rules + do-nots.
+            try:
+                style_so_far = data.get("style") or {}
+                brand_so_far = style_so_far.get("brand") or {}
+                typo_so_far = style_so_far.get("typography") or {}
+                ctx_for_dna = {
+                    "domain": data.get("domain"),
+                    "brand_colors": {
+                        "primary_color": brand_so_far.get("primary_color"),
+                        "secondary_color": brand_so_far.get("secondary_color"),
+                        "accent_color": brand_so_far.get("accent_color"),
+                    },
+                    "typography": {
+                        "primary_font": typo_so_far.get("primary_font"),
+                        "body_font": typo_so_far.get("secondary_font"),
+                    },
+                    "tone_words": brand_so_far.get("tone_words"),
+                    "mission_statement": ((data.get("content") or {}).get("essence") or {}).get("mission_statement"),
+                }
+                design_dna = bedrock_brand.classify_design_dna(
+                    screenshots, brand_context=ctx_for_dna,
+                    model_id=args.bedrock_model, region=args.bedrock_region,
+                )
+                if isinstance(design_dna, dict) and design_dna.get("archetype"):
+                    print(
+                        f"  Bedrock design DNA: archetype={design_dna.get('archetype')} "
+                        f"layout={design_dna.get('layout_preference')} "
+                        f"density={design_dna.get('density')}",
+                        file=sys.stderr,
+                    )
+                    style_so_far.setdefault("design_dna", design_dna)
+                    data["style"] = style_so_far
+            except Exception as e:
+                print(f"  ! Bedrock design-DNA pass failed ({e}); skipping.", file=sys.stderr)
+
             # Pass 2: brand asset classification (logo vs partner-logo vs supporting marks)
             try:
                 imgs = (data.get("images") or {}).get("images", [])
@@ -1801,6 +2053,10 @@ def main() -> None:
     palette_page(c, brand_name, brand, palettes, page_num=next_page); next_page += 1
     gradients_page(c, brand_name, brand, palettes, page_num=next_page); next_page += 1
     next_page = supporting_pages(c, brand_name, palettes, brand, start_page=next_page)
+    next_page = design_dna_page(
+        c, brand_name, style.get("design_dna") or {}, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
     typography_page(c, brand_name, typography, page_num=next_page); next_page += 1
     next_page = logos_pages(c, brand_name, images, start_url, start_page=next_page,
                              primary_color=brand.get("primary_color") or "#111111")

@@ -155,6 +155,74 @@ _PLATFORM_TO_SIZE: dict[str, str] = {
 def _image_size_for_platform(slug: str, default: str) -> str:
     return _PLATFORM_TO_SIZE.get(slug, default)
 
+
+# Platform design IDIOM — separate from aspect ratio. Carries the
+# convention designers actually obey when art-directing for each
+# placement. The model uses this to *override* its default behaviour
+# (which is always "Facebook square") when the operator picks
+# something else.
+PLATFORM_IDIOMS: dict[str, str] = {
+    "facebook-feed": (
+        "Stop-the-scroll feed creative. Bold typographic anchor, one "
+        "strong photographic element, brand colour reserved for the "
+        "CTA. Mobile-first reading distance."
+    ),
+    "instagram-feed": (
+        "Lifestyle-led, photo-dominant square. Restrained type. The "
+        "brand mark can be small. Composition reads at thumbnail size."
+    ),
+    "instagram-story": (
+        "Vertical 9:16 immersive. Edge-to-edge photograph; type sits "
+        "in the safe centre band. High-contrast, bold display, "
+        "motion-implied composition (off-centre, dynamic angle)."
+    ),
+    "linkedin-post": (
+        "Sober, evidence-led, professional. No glossy gradients. "
+        "Typographic hierarchy carries the message; photography is "
+        "documentary, not stylised. Brand colour as accent only."
+    ),
+    "tiktok-reel": (
+        "Vertical 9:16 cover frame. High-contrast bold typography over "
+        "a single hero image. Reads like a magazine cover for a "
+        "movement, not a corporate ad. Punchy colour."
+    ),
+    "google-display": (
+        "Landscape 16:9 banner. Headline plus single visual element. "
+        "Reads instantly at small sizes. Restraint over decoration. "
+        "Reserve brand colour for the CTA pill."
+    ),
+    "website-banner": (
+        "Editorial 16:9 hero. Magazine-cover energy: dominant "
+        "photographic element, restrained typography sitting in a "
+        "deliberate composition, generous negative space. NOT a "
+        "Facebook square. NEVER use feed-ad conventions."
+    ),
+    "email-header": (
+        "Wide 16:9 header. One photograph, one headline, no CTA "
+        "(CTA lives below in HTML). Minimal type. Reads well as a "
+        "preview thumbnail in the inbox."
+    ),
+    "print-flyer": (
+        "Magazine-density typesetting. Treat as A4 portrait poster. "
+        "Use fine typographic detail (figures, small caps, leading), "
+        "generous margins, restrained colour. Photography reads as "
+        "editorial, never stocky."
+    ),
+    "multi-platform": (
+        "Versatile composition that survives both square and "
+        "landscape crops. Single dominant element with breathing "
+        "room around it; type placed away from the centre so "
+        "platform-specific safe zones don't cut it."
+    ),
+}
+
+
+def _idiom_for_platform(slug: str) -> str:
+    return PLATFORM_IDIOMS.get(
+        slug,
+        "Versatile branded creative. Single hero element + restrained typography.",
+    )
+
 ARTIFACTS_BUCKET = os.environ["ARTIFACTS_BUCKET"]
 ADS_JOBS_TABLE = os.environ["ADS_JOBS_TABLE"]
 OPENAI_API_KEY_PARAM = os.environ.get(
@@ -236,6 +304,38 @@ SYSTEM_PROMPT = (
     "Render photographic elements in a photorealistic style — real "
     "photographs, not illustrations or 3D renders."
 )
+
+
+COPY_INSTRUCTIONS_HEADER = """
+You are art-directing this advert, not just describing it. You have:
+  - the brand's DESIGN DNA (archetype + density + typography + photo
+    treatment + layout preference + reference marks + voice-to-design
+    rules + do-nots),
+  - the resolved PLATFORM IDIOM (the design convention for the
+    chosen placement — feed vs story vs banner vs print, etc.),
+  - the resolved CREATIVE BRIEF (objective, layout, angle, elements).
+
+Your image_prompt must REASON FROM THE DNA. Concrete rules:
+
+1. The archetype is the contract. If the archetype is
+   'editorial-restrained', do not produce a maximalist neon ad. If
+   it's 'bold-utilitarian', do not produce a wispy lifestyle scene.
+2. The platform idiom overrides default Facebook-square instincts.
+   A 'website-banner' must be a 16:9 magazine-cover composition; a
+   'linkedin-post' must read as sober and evidence-led; a 'print-flyer'
+   must use editorial typesetting (figures, small caps, generous
+   margins). NEVER describe a website banner as a Facebook square.
+3. The voice_to_design rules are the bridge from copy hook to layout.
+   If the angle is 'premium', apply the brand's 'premium' rule
+   verbatim. Same for 'urgent' (urgency-limited), 'trust' (trust-led
+   or build-trust), 'playful' (educational / brand-awareness).
+4. The do_not list is binding. If the brand says 'no neon gradients',
+   do not put a neon gradient in the prompt — even if gpt-image-1's
+   default would.
+5. The reference_marks are mood anchors. Mention them in the prompt
+   as DESIGN INFLUENCES (\"composition influenced by Aesop in-store
+   typography\"), never as logos or trademarks to render.
+"""
 
 
 COPY_INSTRUCTIONS = """
@@ -350,6 +450,12 @@ def _brand_summary(brand: dict) -> dict:
     # Each item: {url, category, description, subjects}.
     marketing = images_block.get("marketing_imagery") or []
 
+    # Design DNA — the visual contract the brand-worker extracted.
+    # Carries archetype + density + typo rules + photo treatment +
+    # layout preference + reference marks + voice-to-design rules +
+    # do-nots. This is what makes the ad stop looking generic.
+    design_dna = style.get("design_dna") or {}
+
     return {
         "domain": brand.get("domain"),
         "start_url": brand.get("start_url"),
@@ -372,6 +478,7 @@ def _brand_summary(brand: dict) -> dict:
         # rates and the model only needs a representative sample to
         # choose from.
         "marketing_imagery": marketing[:12],
+        "design_dna": design_dna,
     }
 
 
@@ -396,13 +503,14 @@ def _draft_copy_and_prompt(
     cta: str,
     sample_ad_url: str,
     brief: dict,
+    platform_idiom: str,
 ) -> dict:
     """`brief` is the resolved creative brief — a dict shaped like:
         {
-          "platform":  ("Facebook feed", was_auto_bool),
-          "objective": ("Get leads",     was_auto_bool),
-          "layout":    ("Single hero…",  was_auto_bool),
-          "angle":     ("Benefit-led…",  was_auto_bool),
+          "platform":  [slug, "Facebook feed", was_auto_bool],
+          "objective": [slug, "Get leads",     was_auto_bool],
+          "layout":    [slug, "Single hero…",  was_auto_bool],
+          "angle":     [slug, "Benefit-led…",  was_auto_bool],
           "elements":  [human_label, ...],
         }
     """
@@ -422,9 +530,10 @@ def _draft_copy_and_prompt(
             print(f"  ! pdf upload failed ({e}); proceeding without it.", file=sys.stderr)
 
     # Render the creative brief — auto-picked values get a "(auto)"
-    # marker so gpt-4o knows the operator didn't specifically choose.
-    def _line(label: str, val: tuple[str, bool]) -> str:
-        text, was_auto = val
+    # marker so gpt-5 knows the operator didn't specifically choose.
+    # brief values are [slug, label, was_auto].
+    def _line(label: str, val: list) -> str:
+        _slug, text, was_auto = val[0], val[1], val[2]
         return f"  {label}: {text}" + ("  (auto)" if was_auto else "")
     elements_line = ", ".join(brief["elements"]) if brief["elements"] else "(none — image-only composition)"
     creative_brief_text = (
@@ -433,7 +542,10 @@ def _draft_copy_and_prompt(
         f"{_line('OBJECTIVE', brief['objective'])}\n"
         f"{_line('LAYOUT   ', brief['layout'])}\n"
         f"{_line('MESSAGE  ', brief['angle'])}\n"
-        f"  ELEMENTS : {elements_line}"
+        f"  ELEMENTS : {elements_line}\n\n"
+        "PLATFORM DESIGN IDIOM (binding — override generic feed-ad "
+        "defaults to match this):\n"
+        f"  {platform_idiom}"
     )
 
     user_content = [
@@ -463,7 +575,16 @@ def _draft_copy_and_prompt(
     resp = client.chat.completions.create(
         model=TEXT_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT + "\n\n" + COPY_INSTRUCTIONS},
+            {
+                "role": "system",
+                "content": (
+                    SYSTEM_PROMPT
+                    + "\n\n"
+                    + COPY_INSTRUCTIONS_HEADER
+                    + "\n\n"
+                    + COPY_INSTRUCTIONS
+                ),
+            },
             {"role": "user", "content": user_content},
         ],
         response_format={"type": "json_object"},
@@ -609,8 +730,10 @@ def handler(event, _context):
                 print(f"[ad {ad_id}] logo fetch failed ({e}); rendering without reference", file=sys.stderr)
 
         # ── 2. Draft copy + image prompt ───────────────────────────
+        platform_idiom = _idiom_for_platform(platform[0])
         drafted = _draft_copy_and_prompt(
             summary, pdf_bytes, headline, body, cta, sample_ad_url, brief,
+            platform_idiom,
         )
         ref_url = (drafted.get("reference_image_url") or "").strip()
         print(
