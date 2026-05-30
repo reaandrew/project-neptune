@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -19,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
 type jobResponse struct {
@@ -35,6 +37,35 @@ type jobResponse struct {
 	Error         string `json:"error,omitempty"`
 	CreatedAt     string `json:"createdAt,omitempty"`
 	CompletedAt   string `json:"completedAt,omitempty"`
+	IsAdmin       bool   `json:"isAdmin,omitempty"`
+}
+
+// Admin-subject lookup cached for the lambda lifetime. Resolved on
+// first request, not at package init, so an SSM hiccup at cold start
+// is recoverable.
+var (
+	adminSubjectOnce sync.Once
+	adminSubject     string
+)
+
+func loadAdminSubject(ctx context.Context, ssmClient *ssm.Client) string {
+	adminSubjectOnce.Do(func() {
+		name := os.Getenv("ADMIN_SUBJECT_PARAM")
+		if name == "" {
+			return
+		}
+		out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+			Name: aws.String(name),
+		})
+		if err != nil {
+			log.Printf("admin subject lookup: %v", err)
+			return
+		}
+		if out.Parameter != nil && out.Parameter.Value != nil {
+			adminSubject = *out.Parameter.Value
+		}
+	})
+	return adminSubject
 }
 
 func jsonResp(status int, body interface{}) events.APIGatewayV2HTTPResponse {
@@ -110,6 +141,9 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return errResp(404, "not found"), nil
 	}
 
+	ssmClient := ssm.NewFromConfig(awsCfg)
+	admin := loadAdminSubject(ctx, ssmClient)
+
 	resp := jobResponse{
 		JobID:        jobID,
 		Status:       sval(out.Item, "status"),
@@ -120,6 +154,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		Error:        sval(out.Item, "error"),
 		CreatedAt:    sval(out.Item, "created_at"),
 		CompletedAt:  sval(out.Item, "completed_at"),
+		IsAdmin:      admin != "" && subject == admin,
 	}
 
 	if resp.Status == "done" {

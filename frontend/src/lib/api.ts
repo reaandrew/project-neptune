@@ -59,6 +59,7 @@ export interface BrandJob {
   error?: string;
   createdAt?: string;
   completedAt?: string;
+  isAdmin?: boolean;
 }
 
 export interface CreateBrandJobResponse {

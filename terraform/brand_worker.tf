@@ -349,8 +349,9 @@ resource "aws_lambda_function" "brand_jobs_get" {
 
   environment {
     variables = {
-      JOBS_TABLE       = aws_dynamodb_table.brand_jobs.name
-      ARTIFACTS_BUCKET = aws_s3_bucket.artifacts.id
+      JOBS_TABLE          = aws_dynamodb_table.brand_jobs.name
+      ARTIFACTS_BUCKET    = aws_s3_bucket.artifacts.id
+      ADMIN_SUBJECT_PARAM = "/project-neptune/admin-subject"
     }
   }
 
