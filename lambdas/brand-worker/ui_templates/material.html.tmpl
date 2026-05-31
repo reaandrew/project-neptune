@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1280, initial-scale=1" />
+  <title>$brand_name — Material UI</title>
+  <link href="https://fonts.googleapis.com/css2?family=$display_font_q:wght@500;700&family=$body_font_q:wght@400;500;700&family=Material+Symbols+Outlined&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --md-primary: $primary;
+      --md-primary-dim: $primary_dim;
+      --md-primary-soft: $primary_soft;
+      --md-primary-pale: $primary_pale;
+      --md-accent: $accent;
+      --md-text: $text_color;
+      --md-on-primary: $on_primary;
+      --md-surface: #FFFFFF;
+      --md-surface-variant: #F4F4F5;
+      --md-outline: #D4D4D8;
+    }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: '$body_font', Roboto, system-ui, sans-serif;
+      color: var(--md-text);
+      background: var(--md-surface);
+    }
+    .display { font-family: '$display_font', 'Roboto Flex', sans-serif; }
+
+    /* App bar */
+    .appbar {
+      background: var(--md-primary); color: var(--md-on-primary);
+      padding: 14px 32px; display: flex; align-items: center; gap: 16px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.05);
+    }
+    .appbar .menu-icon { font-family: 'Material Symbols Outlined'; font-size: 26px; cursor: pointer; }
+    .appbar .brand { display: flex; align-items: center; gap: 12px; }
+    .appbar .title { font-family: '$display_font', Roboto, sans-serif; font-weight: 700; font-size: 20px; letter-spacing: -.01em; }
+    .appbar .actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 999px; display: grid; place-items: center;
+      cursor: pointer; transition: background .15s;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,.18); }
+    .icon-btn span { font-family: 'Material Symbols Outlined'; font-size: 22px; }
+
+    /* Hero */
+    .hero { max-width: 1180px; margin: 0 auto; padding: 48px 32px 16px; }
+    .eyebrow {
+      font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+      color: #62626A; display: inline-flex; align-items: center; gap: 12px; font-weight: 600;
+    }
+    .eyebrow::before { content: ''; display: block; width: 28px; height: 2px; background: var(--md-primary); }
+    h1.hero-title {
+      font-family: '$display_font', Roboto, sans-serif; font-weight: 700;
+      font-size: 56px; line-height: 1.05; letter-spacing: -.02em; margin: 14px 0 12px;
+    }
+    h1.hero-title .accent { color: var(--md-primary); }
+    .hero-sub { font-size: 18px; line-height: 1.55; color: #43434A; max-width: 620px; margin: 0; }
+    .hero-actions { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* Material buttons */
+    .btn { font-family: inherit; font-weight: 600; font-size: 14px;
+      padding: 10px 24px; border-radius: 999px; border: 0; cursor: pointer; letter-spacing: .02em; transition: all .15s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-filled { background: var(--md-primary); color: var(--md-on-primary); }
+    .btn-filled:hover { background: var(--md-primary-dim); }
+    .btn-outlined { background: transparent; color: var(--md-primary); border: 1px solid var(--md-outline); }
+    .btn-tonal { background: var(--md-primary-soft); color: var(--md-primary); }
+    .btn-text { background: transparent; color: var(--md-primary); padding: 10px 14px; }
+
+    /* Cards row */
+    .cards { max-width: 1180px; margin: 32px auto; padding: 0 32px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .card { background: var(--md-surface); border: 1px solid #ECECEF; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04); }
+    .card-media { height: 130px; background: linear-gradient(135deg, $primary, $primary_dim); display: grid; place-items: center; color: var(--md-on-primary); font-family: 'Material Symbols Outlined'; font-size: 56px; }
+    .card-body { padding: 18px 20px 20px; }
+    .card-eyebrow { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #62626A; font-weight: 700; }
+    .card-title { font-family: '$display_font', Roboto, sans-serif; font-size: 20px; font-weight: 700; margin: 6px 0 8px; }
+    .card-text { font-size: 14px; line-height: 1.55; color: #43434A; margin: 0; }
+    .card-actions { padding: 8px 12px 16px; display: flex; gap: 4px; }
+
+    /* Form */
+    .form-section { max-width: 1180px; margin: 8px auto 24px; padding: 0 32px; display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+    .form-card { background: var(--md-surface-variant); border-radius: 16px; padding: 28px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+    .field { position: relative; }
+    .field input {
+      width: 100%; padding: 14px 14px 14px; border: 1px solid var(--md-outline); background: white;
+      border-radius: 6px; font-size: 15px; font-family: inherit; color: inherit;
+    }
+    .field input:focus { border-color: var(--md-primary); outline: 2px solid color-mix(in srgb, var(--md-primary) 24%, transparent); outline-offset: -1px; }
+    .field label { font-size: 12px; color: #62626A; letter-spacing: .02em; display: block; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; }
+
+    /* Chips */
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--md-surface-variant); color: var(--md-text); font-size: 13px; font-weight: 500;
+      padding: 6px 14px; border-radius: 999px; border: 1px solid var(--md-outline);
+    }
+    .chip.filled { background: var(--md-primary); color: var(--md-on-primary); border-color: transparent; }
+    .chip.tonal { background: var(--md-primary-soft); color: var(--md-primary); border-color: transparent; }
+    .chip .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: .9; }
+
+    /* Footer */
+    footer { border-top: 1px solid #ECECEF; }
+    footer .inner { max-width: 1180px; margin: 0 auto; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #62626A; }
+  </style>
+</head>
+<body>
+  <div class="appbar">
+    <span class="menu-icon">menu</span>
+    <div class="brand">
+      $logo_or_mark
+      <span class="title">$brand_name</span>
+    </div>
+    <div class="actions">
+      <div class="icon-btn"><span>search</span></div>
+      <div class="icon-btn"><span>notifications</span></div>
+      <button class="btn btn-filled" style="background: white; color: var(--md-primary); box-shadow: 0 2px 6px rgba(0,0,0,.12);">Get started</button>
+    </div>
+  </div>
+
+  <section class="hero">
+    <span class="eyebrow">Material UI · Brand applied</span>
+    <h1 class="hero-title">A familiar shape.<br/><span class="accent">A new feel.</span></h1>
+    <p class="hero-sub">Material 3 components retuned with your brand colours, typography, and tone. Familiar to every user, distinctly yours.</p>
+    <div class="hero-actions">
+      <button class="btn btn-filled">Filled action</button>
+      <button class="btn btn-outlined">Outlined</button>
+      <button class="btn btn-tonal">Tonal</button>
+      <button class="btn btn-text">Text →</button>
+    </div>
+  </section>
+
+  <section class="cards">
+    $feature_cards_material
+  </section>
+
+  <section class="form-section">
+    <div class="form-card">
+      <div class="display" style="font-size: 22px; font-weight: 700;">Get in touch</div>
+      <p style="margin: 6px 0 0; color: #43434A; font-size: 14px;">We'll reply within a working day.</p>
+      <div class="form-grid">
+        <div class="field"><label>Name</label><input type="text" placeholder="Your name" /></div>
+        <div class="field"><label>Email</label><input type="email" placeholder="you@example.com" /></div>
+      </div>
+      <div class="field" style="margin-top:16px;"><label>Project</label><input type="text" placeholder="Tell us about it" /></div>
+      <div style="margin-top: 18px;"><button class="btn btn-filled">Send enquiry</button></div>
+    </div>
+    <div>
+      <div class="display" style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">Status & tags</div>
+      <div class="chips">
+        <div class="chip filled"><span class="dot"></span>Active</div>
+        <div class="chip tonal">Recommended</div>
+        <div class="chip">Updated</div>
+        <div class="chip">v2.0</div>
+        <div class="chip">Beta</div>
+        <div class="chip">Enterprise</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="inner">
+      <span>© $year $brand_name · Material UI treatment</span>
+      <span>Built on Material 3 design tokens</span>
+    </div>
+  </footer>
+</body>
+</html>

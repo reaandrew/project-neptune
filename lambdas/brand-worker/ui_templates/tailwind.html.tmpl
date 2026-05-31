@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1280, initial-scale=1" />
+  <title>$brand_name — Tailwind</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=$display_font_q:wght@500;700&family=$body_font_q:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '$primary', soft: '$primary_soft', dim: '$primary_dim' },
+            accent: '$accent',
+            ink:   '$text_color',
+          },
+          fontFamily: {
+            display: ['"$display_font"', 'serif'],
+            sans: ['"$body_font"', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    html, body { font-family: '$body_font', system-ui, -apple-system, sans-serif; }
+    .font-display { font-family: '$display_font', serif; }
+  </style>
+</head>
+<body class="bg-white text-ink antialiased">
+  <!-- Top nav -->
+  <header class="border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        $logo_or_mark
+        <span class="font-display text-xl font-bold tracking-tight">$brand_name</span>
+      </div>
+      <nav class="hidden md:flex items-center gap-7 text-sm font-medium text-slate-700">
+        <a href="#" class="hover:text-brand">Services</a>
+        <a href="#" class="hover:text-brand">About</a>
+        <a href="#" class="hover:text-brand">Work</a>
+        <a href="#" class="hover:text-brand">Contact</a>
+      </nav>
+      <a href="#" class="inline-flex items-center gap-2 rounded-full bg-brand text-white px-5 py-2.5 text-sm font-semibold shadow-sm hover:bg-brand-dim transition">Get started →</a>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-8 pt-14 pb-12">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-10 items-center">
+      <div class="md:col-span-3">
+        <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 flex items-center gap-3">
+          <span class="block w-10 h-[2px] bg-brand"></span>
+          Tailwind UI · Brand applied
+        </div>
+        <h1 class="font-display text-5xl md:text-6xl font-bold tracking-tight leading-[1.05]">
+          Built for the<br/><span class="text-brand">way you work.</span>
+        </h1>
+        <p class="mt-6 text-lg text-slate-600 max-w-xl leading-relaxed">
+          A complete component system styled in your brand colours, typography, and tone — ready to drop into any modern web app.
+        </p>
+        <div class="mt-8 flex flex-wrap items-center gap-3">
+          <a href="#" class="inline-flex items-center gap-2 rounded-full bg-brand text-white px-6 py-3 text-sm font-semibold hover:bg-brand-dim transition">Primary action</a>
+          <a href="#" class="inline-flex items-center gap-2 rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition">Secondary</a>
+          <a href="#" class="text-sm font-semibold text-brand hover:underline">Learn more →</a>
+        </div>
+      </div>
+      <div class="md:col-span-2">
+        <div class="rounded-2xl overflow-hidden shadow-xl ring-1 ring-slate-200">
+          <div class="aspect-[4/5] bg-brand-soft grid place-items-center text-white font-display text-7xl font-bold">
+            $brand_initial
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature cards -->
+  <section class="max-w-6xl mx-auto px-8 pb-14">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+      $feature_cards_tailwind
+    </div>
+  </section>
+
+  <!-- Form + alerts -->
+  <section class="max-w-6xl mx-auto px-8 pb-16 grid grid-cols-1 md:grid-cols-5 gap-10">
+    <form class="md:col-span-3 rounded-2xl bg-slate-50 border border-slate-200 p-8">
+      <div class="font-display text-2xl font-bold tracking-tight">Join the mailing list</div>
+      <p class="mt-1 text-sm text-slate-600">One email a month. No spam, ever.</p>
+      <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label class="block">
+          <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Name</span>
+          <input type="text" placeholder="Your name" class="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none" />
+        </label>
+        <label class="block">
+          <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Email</span>
+          <input type="email" placeholder="you@example.com" class="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none" />
+        </label>
+      </div>
+      <button type="submit" class="mt-6 inline-flex items-center gap-2 rounded-full bg-brand text-white px-6 py-3 text-sm font-semibold hover:bg-brand-dim transition">Subscribe →</button>
+    </form>
+    <div class="md:col-span-2 space-y-3">
+      <div class="rounded-lg border-l-4 border-green-500 bg-green-50 p-4">
+        <div class="font-semibold text-green-900 text-sm">Saved</div>
+        <div class="text-sm text-green-800">Your changes have been published.</div>
+      </div>
+      <div class="rounded-lg border-l-4 p-4" style="border-color: $primary; background: $primary_pale;">
+        <div class="font-semibold text-sm" style="color: $primary_text_on_pale;">Heads up</div>
+        <div class="text-sm" style="color: $primary_text_on_pale;">Your trial ends in 7 days.</div>
+      </div>
+      <div class="rounded-lg border-l-4 border-rose-500 bg-rose-50 p-4">
+        <div class="font-semibold text-rose-900 text-sm">Something went wrong</div>
+        <div class="text-sm text-rose-800">Please try again in a moment.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer / badges -->
+  <footer class="border-t border-slate-200">
+    <div class="max-w-6xl mx-auto px-8 py-6 flex items-center justify-between flex-wrap gap-4">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">v2.0</span>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">Beta</span>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">All systems go</span>
+      </div>
+      <div class="text-xs text-slate-500">© $year $brand_name · Tailwind treatment</div>
+    </div>
+  </footer>
+</body>
+</html>

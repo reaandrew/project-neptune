@@ -1355,6 +1355,56 @@ def ui_components_page(
     return page_num + 1
 
 
+def framework_showcase_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    framework_key: str,
+    framework_label: str,
+    screenshot_path: Path | None,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """One PDF page per framework — title + the full-page screenshot
+    of brand-styled HTML scaled to fit the page. Falls through silently
+    if the screenshot is missing for that framework."""
+    if not screenshot_path or not screenshot_path.exists():
+        return page_num
+
+    draw_page_chrome(c, "UI Showcase", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        f"Components · {framework_label}",
+        "Your brand applied to a real component library — same nav, hero, cards, form, and alerts as you'd ship in production.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    footer_band = 50
+    image_max_h = y - MARGIN - footer_band
+    image_max_w = PAGE_W - 2 * MARGIN
+
+    try:
+        img = ImageReader(str(screenshot_path))
+        iw, ih = img.getSize()
+        scale = min(image_max_w / iw, image_max_h / ih)
+        dw, dh = iw * scale, ih * scale
+        x = MARGIN + (image_max_w - dw) / 2
+        cy = y - dh
+        # Frame
+        c.setStrokeColor(HexColor("#E0E0E0"))
+        c.setLineWidth(0.6)
+        c.rect(x - 4, cy - 4, dw + 8, dh + 8, fill=0, stroke=1)
+        # Accent rule along the bottom edge of the frame
+        c.setFillColor(HexColor(primary_color))
+        c.rect(x - 4, cy - 6, dw + 8, 2, fill=1, stroke=0)
+        # The screenshot itself
+        c.drawImage(img, x, cy, dw, dh)
+    except Exception as e:
+        print(f"  ! could not render {framework_key} screenshot: {e}", file=sys.stderr)
+
+    c.showPage()
+    return page_num + 1
+
+
 def typography_page(c: canvas.Canvas, brand_name: str, typography: dict, page_num: int) -> None:
     draw_page_chrome(c, "Typography", page_num, brand_name)
     y = draw_section_title(c, "Typography", "Display typeface and type scale.", PAGE_H - MARGIN - 30)
@@ -2827,6 +2877,41 @@ def main() -> None:
     brand_name = args.brand_name or brand_name_from(brand, start_url)
     blurb = about_blurb_from_content(content) or f"{brand_name} brand guidelines."
 
+    # ── UI showcase: render brand-styled HTML for three popular
+    # frameworks (Tailwind, Material UI, Bootstrap) and screenshot
+    # each so the PDF can show real-world UI samples instead of
+    # ReportLab box approximations. Headless Chromium handles the
+    # render; if it fails for any framework we just skip that page.
+    framework_screenshots: dict[str, Path] = {}
+    try:
+        import ui_showcase  # local module — lazy import to avoid
+        # paying its dependencies on toolkit-only runs.
+        essence_so_far = (data.get("content") or {}).get("essence") or {}
+        ui_summary = {
+            "brand_name": essence_so_far.get("brand_name") or brand.get("brand_name") or brand_name,
+            "domain": data.get("domain"),
+            "primary_color": brand.get("primary_color"),
+            "secondary_color": brand.get("secondary_color"),
+            "accent_color": brand.get("accent_color"),
+            "text_color": brand.get("text_color"),
+            "primary_font": typography.get("primary_font"),
+            "body_font": typography.get("secondary_font"),
+            "primary_logo_url": next(
+                (im.get("url") for im in (images.get("images") or []) if im.get("role") == "brand_primary"),
+                None,
+            ) or next(
+                (im.get("url") for im in (images.get("images") or []) if im.get("role") == "logo"),
+                None,
+            ),
+            "core_services": essence_so_far.get("core_services"),
+        }
+        showcase_dir = Path(args.screenshot_dir) / "ui-showcase"
+        framework_screenshots = ui_showcase.render_framework_screenshots(
+            ui_summary, showcase_dir, args.year,
+        )
+    except Exception as e:
+        print(f"  ! UI showcase render failed ({e}); skipping framework pages.", file=sys.stderr)
+
     c = canvas.Canvas(args.output, pagesize=landscape(A4))
     c.setTitle(f"{brand_name} Brand Guidelines")
     c.setAuthor(brand_name)
@@ -2896,9 +2981,32 @@ def main() -> None:
         c, brand_name, voice_section, page_num=next_page,
         primary_color=brand.get("primary_color") or "#111111",
     )
-    next_page = ui_components_page(
-        c, brand_name, brand, typography, page_num=next_page,
-    )
+    # UI showcase: one page per framework, full-width screenshot of
+    # brand-styled HTML rendered by headless Chromium upstream. The
+    # ReportLab-drawn ui_components_page is kept in the codebase as
+    # a fallback if every Chromium render fails.
+    showcase_labels = [
+        ("tailwind",  "Tailwind"),
+        ("material",  "Material UI"),
+        ("bootstrap", "Bootstrap"),
+    ]
+    any_showcase = False
+    for fw_key, fw_label in showcase_labels:
+        path = framework_screenshots.get(fw_key)
+        before = next_page
+        next_page = framework_showcase_page(
+            c, brand_name, fw_key, fw_label, path,
+            page_num=next_page,
+            primary_color=brand.get("primary_color") or "#111111",
+        )
+        if next_page > before:
+            any_showcase = True
+    if not any_showcase:
+        # Chromium broke for every framework. Fall back to the
+        # ReportLab box approximation so the section isn't empty.
+        next_page = ui_components_page(
+            c, brand_name, brand, typography, page_num=next_page,
+        )
     typography_page(c, brand_name, typography, page_num=next_page); next_page += 1
     next_page = logos_pages(c, brand_name, images, start_url, start_page=next_page,
                              primary_color=brand.get("primary_color") or "#111111")
