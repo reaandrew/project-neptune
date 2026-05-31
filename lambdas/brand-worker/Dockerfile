@@ -25,6 +25,7 @@ RUN pip install --upgrade pip \
  && playwright install chromium
 
 COPY *.py ./
+COPY ui_templates ./ui_templates
 
 # Lambda Runtime Interface Emulator — only invoked locally.
 ADD https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie /usr/local/bin/aws-lambda-rie
