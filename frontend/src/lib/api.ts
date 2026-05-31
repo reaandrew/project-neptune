@@ -53,6 +53,9 @@ export interface BrandJob {
   yamlUrl?: string;
   jsonUrl?: string;
   screenshotUrl?: string;
+  tailwindConfigUrl?: string;
+  muiThemeUrl?: string;
+  bootstrapVarsUrl?: string;
   brandName?: string;
   primaryColor?: string;
   logoUrl?: string;

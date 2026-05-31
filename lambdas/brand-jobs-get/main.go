@@ -24,20 +24,23 @@ import (
 )
 
 type jobResponse struct {
-	JobID         string `json:"jobId"`
-	Status        string `json:"status"`
-	URL           string `json:"url,omitempty"`
-	PDFURL        string `json:"pdfUrl,omitempty"`
-	YAMLURL       string `json:"yamlUrl,omitempty"`
-	JSONURL       string `json:"jsonUrl,omitempty"`
-	ScreenshotURL string `json:"screenshotUrl,omitempty"`
-	BrandName     string `json:"brandName,omitempty"`
-	PrimaryColor  string `json:"primaryColor,omitempty"`
-	LogoURL       string `json:"logoUrl,omitempty"`
-	Error         string `json:"error,omitempty"`
-	CreatedAt     string `json:"createdAt,omitempty"`
-	CompletedAt   string `json:"completedAt,omitempty"`
-	IsAdmin       bool   `json:"isAdmin,omitempty"`
+	JobID            string `json:"jobId"`
+	Status           string `json:"status"`
+	URL              string `json:"url,omitempty"`
+	PDFURL           string `json:"pdfUrl,omitempty"`
+	YAMLURL          string `json:"yamlUrl,omitempty"`
+	JSONURL          string `json:"jsonUrl,omitempty"`
+	ScreenshotURL    string `json:"screenshotUrl,omitempty"`
+	TailwindURL      string `json:"tailwindConfigUrl,omitempty"`
+	MUIThemeURL      string `json:"muiThemeUrl,omitempty"`
+	BootstrapVarsURL string `json:"bootstrapVarsUrl,omitempty"`
+	BrandName        string `json:"brandName,omitempty"`
+	PrimaryColor     string `json:"primaryColor,omitempty"`
+	LogoURL          string `json:"logoUrl,omitempty"`
+	Error            string `json:"error,omitempty"`
+	CreatedAt        string `json:"createdAt,omitempty"`
+	CompletedAt      string `json:"completedAt,omitempty"`
+	IsAdmin          bool   `json:"isAdmin,omitempty"`
 }
 
 // Admin-subject lookup cached for the lambda lifetime. Resolved on
@@ -182,6 +185,9 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		resp.YAMLURL = sign(sval(out.Item, "yaml_key"))
 		resp.JSONURL = sign(sval(out.Item, "json_key"))
 		resp.ScreenshotURL = sign(sval(out.Item, "screenshot_key"))
+		resp.TailwindURL = sign(sval(out.Item, "tailwind_key"))
+		resp.MUIThemeURL = sign(sval(out.Item, "mui_theme_key"))
+		resp.BootstrapVarsURL = sign(sval(out.Item, "bootstrap_vars_key"))
 	}
 
 	return jsonResp(200, resp), nil

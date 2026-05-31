@@ -254,26 +254,52 @@ function DownloadsSidebar({
   regenerating: boolean;
 }) {
   return (
-    <div className="panel p-5 space-y-4">
+    <div className="panel p-5 space-y-5">
       <div>
         <div className="label flex items-center gap-3">
           <span className="accent-rule" />
-          Guidelines
+          Downloads
         </div>
         <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-          The complete brand book. Download link expires after 15 minutes.
+          Brand book plus framework theme files. Links expire after 15 minutes.
         </p>
       </div>
+
+      {/* Brand book */}
       {job.pdfUrl && (
-        <a
-          href={job.pdfUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="btn-primary w-full"
-        >
-          Download PDF
-        </a>
+        <div>
+          <div className="text-[10px] uppercase tracking-widest2 text-slate-500 mb-2">
+            Brand book
+          </div>
+          <DownloadRow
+            href={job.pdfUrl}
+            label="Brand guidelines"
+            ext="PDF"
+            primary
+          />
+        </div>
       )}
+
+      {/* Framework theme files */}
+      {(job.tailwindConfigUrl || job.muiThemeUrl || job.bootstrapVarsUrl) && (
+        <div>
+          <div className="text-[10px] uppercase tracking-widest2 text-slate-500 mb-2">
+            Theme files
+          </div>
+          <div className="space-y-1.5">
+            {job.tailwindConfigUrl && (
+              <DownloadRow href={job.tailwindConfigUrl} label="Tailwind config" ext="JS" />
+            )}
+            {job.muiThemeUrl && (
+              <DownloadRow href={job.muiThemeUrl} label="Material UI theme" ext="TS" />
+            )}
+            {job.bootstrapVarsUrl && (
+              <DownloadRow href={job.bootstrapVarsUrl} label="Bootstrap variables" ext="SCSS" />
+            )}
+          </div>
+        </div>
+      )}
+
       {job.isAdmin && (
         <button
           onClick={onRegenerate}
@@ -285,6 +311,41 @@ function DownloadsSidebar({
         </button>
       )}
     </div>
+  );
+}
+
+function DownloadRow({
+  href,
+  label,
+  ext,
+  primary,
+}: {
+  href: string;
+  label: string;
+  ext: string;
+  primary?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      download
+      className={`flex items-center justify-between gap-3 rounded-md px-3 py-2.5 text-sm transition ${
+        primary
+          ? 'bg-brand text-white hover:bg-brand-bright shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_8px_20px_-8px_rgba(8,145,178,0.55)]'
+          : 'border border-white/10 text-slate-200 hover:border-white/30 hover:bg-white/5'
+      }`}
+    >
+      <span className="font-medium">{label}</span>
+      <span
+        className={`text-[10px] uppercase tracking-widest2 font-semibold rounded px-1.5 py-0.5 ${
+          primary ? 'bg-white/20' : 'bg-white/10 text-slate-400'
+        }`}
+      >
+        {ext}
+      </span>
+    </a>
   );
 }
 

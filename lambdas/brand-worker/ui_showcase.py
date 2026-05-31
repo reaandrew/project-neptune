@@ -26,8 +26,11 @@ import requests
 
 
 FRAMEWORKS = ("tailwind", "material", "bootstrap")
-VIEWPORT_W = 1280
-VIEWPORT_H = 920
+# 1600×900 gives the swatchbook room to breathe — wider component
+# rows, less wrapping, sharper detail when scaled to fit the landscape
+# A4 PDF page.
+VIEWPORT_W = 1600
+VIEWPORT_H = 900
 
 
 # ─────────────────────────────────────────────────────────────────

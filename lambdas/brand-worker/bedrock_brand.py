@@ -646,15 +646,28 @@ Return STRICT JSON with EXACTLY this shape, no markdown:
 
 {{
   "tone_of_voice": {{
-    "summary": "1-2 sentences capturing how the brand sounds in its own copy",
+    "summary": "1-2 sentences capturing how the brand sounds in its own copy. Use the brand's own register and vocabulary, not generic agency words.",
     "examples": [
       {{
-        "context": "Short label — e.g. 'service description'",
-        "say": "An on-brand phrasing the brand would actually use",
-        "dont_say": "A typical off-brand phrasing to avoid"
+        "context": "Short specific label tied to a real context on this site — e.g. 'Pricing page intro', 'Service description: skip hire', 'Trust message in the footer', 'CTA above the contact form'. Avoid generic labels like 'value statement'.",
+        "say": "An on-brand phrasing. MUST either be a near-verbatim quote from the PARAGRAPH SAMPLE above, or a sentence built entirely from words and phrasings that already appear in the source. Concrete, specific to this business, and in the brand's actual cadence.",
+        "dont_say": "A specific cliché phrasing this brand should reject. Must be a sentence the brand WOULD plausibly be tempted to say if it copied a generic competitor — not a strawman. Reference the same context as `say` so the contrast lands."
       }}
     ]
   }},
+  "_tone_of_voice_rules": "Hard rules for tone_of_voice.examples (do not include this field in the output):
+- Every `say` value must read like it was written by the brand itself. Lift phrasings directly. If you can't find evidence for a say in the source paragraphs, choose a different context.
+- Banned `say` patterns (these are cheesy agency clichés — NEVER output them as a `say`):
+    'We get it done.'  'We help you grow.'  'Let us take care of it.'
+    'Your trusted partner.'  'Bringing your vision to life.'
+    'We're here for you every step of the way.'  'Quality you can trust.'
+    'Tailored solutions for your business.'  'Best-in-class.'
+    'World-class service.'  'Industry-leading.'  'Cutting-edge.'
+    'Passion-led.'  'People-first.'  'Customer-centric.'
+  If your draft `say` matches one of these patterns, pick a different example.
+- Banned `dont_say` patterns: the same list above is what to PUT in `dont_say`. The `dont_say` exists to call out exactly these clichés.
+- Concrete > abstract. Use proper nouns (the brand's services, locations, materials, processes) where the source uses them.
+- Length: each `say` should be ≤ 18 words. Each `dont_say` ≤ 14 words.",
   "voice_spectrum": {{
     "formal_casual": <integer 1-5; 1 = very formal, 5 = very casual>,
     "serious_playful": <integer 1-5>,

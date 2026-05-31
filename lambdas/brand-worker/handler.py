@@ -160,6 +160,7 @@ def handler(event, _context):
     content = (brand_dict.get("content") or {}) if isinstance(brand_dict, dict) else {}
     essence = content.get("essence") or {}
     images = (brand_dict.get("images") or {}) if isinstance(brand_dict, dict) else {}
+    typography_block = style.get("typography") or {}
     image_list = images.get("images") or []
     primary_logo = next(
         (im.get("url") for im in image_list if im.get("role") == "brand_primary"),
@@ -173,6 +174,50 @@ def handler(event, _context):
         or brand_id.get("brand_name")
         or brand_dict.get("domain")
     )
+
+    # ── Generate framework theme files (Tailwind, MUI, Bootstrap) ──
+    # Pure text generation from the brand summary — no AI calls, runs
+    # locally. Each file is uploaded under brand-jobs/<jobId>/ so the
+    # dashboard can offer them as standalone downloads.
+    tailwind_key = None
+    mui_theme_key = None
+    bootstrap_vars_key = None
+    try:
+        import ui_themes
+        theme_brand = {
+            "brand_name": brand_name,
+            "domain": brand_dict.get("domain") if isinstance(brand_dict, dict) else None,
+            "primary_color": brand_id.get("primary_color"),
+            "secondary_color": brand_id.get("secondary_color"),
+            "accent_color": brand_id.get("accent_color"),
+            "surface_color": brand_id.get("surface_color"),
+            "text_color": brand_id.get("text_color"),
+            "primary_font": typography_block.get("primary_font"),
+            "body_font": typography_block.get("secondary_font"),
+        }
+        files = [
+            ("tailwind.config.js",        ui_themes.tailwind_config,    "application/javascript"),
+            ("mui-theme.ts",              ui_themes.mui_theme,           "application/typescript"),
+            ("brand-variables.scss",      ui_themes.bootstrap_variables, "text/x-scss"),
+        ]
+        for fname, builder, ctype in files:
+            try:
+                body = builder(theme_brand)
+                key = f"brand-jobs/{job_id}/{fname}"
+                _s3.put_object(
+                    Bucket=ARTIFACTS_BUCKET, Key=key,
+                    Body=body.encode("utf-8"), ContentType=ctype,
+                )
+                if fname.startswith("tailwind"):
+                    tailwind_key = key
+                elif fname.startswith("mui"):
+                    mui_theme_key = key
+                elif fname.startswith("brand-variables"):
+                    bootstrap_vars_key = key
+            except Exception as e:
+                print(f"  ! theme upload failed for {fname}: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"  ! ui_themes import failed ({e}); skipping theme generation", file=sys.stderr)
 
     completed_at = str(int(time.time()))
     extras = {"pdf_key": pdf_key, "completed_at": completed_at}
@@ -188,6 +233,12 @@ def handler(event, _context):
         extras["primary_color"] = brand_id["primary_color"]
     if brand_name:
         extras["brand_name"] = brand_name
+    if tailwind_key:
+        extras["tailwind_key"] = tailwind_key
+    if mui_theme_key:
+        extras["mui_theme_key"] = mui_theme_key
+    if bootstrap_vars_key:
+        extras["bootstrap_vars_key"] = bootstrap_vars_key
     _set_status(job_id, "done", **extras)
 
     return {"jobId": job_id, "pdfKey": pdf_key, "yamlKey": yaml_key, "jsonKey": json_key}

@@ -62,6 +62,17 @@ def hex_to_rgb(h: str) -> tuple[int, int, int]:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
+def _mix_with_black_hex(hex_color: str, amount: float) -> str:
+    """Darken a hex colour by `amount` (0..1). 0 returns the original,
+    1 returns black. Used to draw a pinstripe accent against itself."""
+    r, g, b = hex_to_rgb(hex_color)
+    return "#{:02X}{:02X}{:02X}".format(
+        max(0, int(r * (1 - amount))),
+        max(0, int(g * (1 - amount))),
+        max(0, int(b * (1 - amount))),
+    )
+
+
 def contrasting_text(hex_color: str) -> str:
     r, g, b = hex_to_rgb(hex_color)
     luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
@@ -229,54 +240,18 @@ def cover_page(
     screenshot_path: str | None = None,
     consultancy_name: str = DEFAULT_CONSULTANCY_NAME,
     consultancy_logo_url: str | None = DEFAULT_CONSULTANCY_LOGO_URL,
+    date_str: str | None = None,
 ) -> None:
     bg = brand_color or "#000000"
     c.setFillColor(HexColor(bg))
     c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
     text_color = contrasting_text(bg)
-    c.setFillColor(HexColor(text_color))
 
     # Reserve a panel on the right side for the homepage screenshot, if
     # available. The text column on the left shrinks accordingly.
     have_screenshot = bool(screenshot_path and Path(screenshot_path).exists())
     panel_w = PAGE_W * 0.45 if have_screenshot else 0
     text_w = PAGE_W - 2 * MARGIN - panel_w
-
-    # Consultancy logo top-left: brand-guidelines books carry the
-    # consultancy mark on the cover, not the brand's own logo (the
-    # brand's mark is the centrepiece of the Logos & Marks pages later
-    # in the book).
-    logo_bottom_y = None
-    consultancy_data = _get_cached_logo(consultancy_logo_url) if consultancy_logo_url else None
-    if consultancy_data:
-        try:
-            img = ImageReader(io.BytesIO(consultancy_data))
-            iw, ih = img.getSize()
-            target_h = 60
-            scale = target_h / ih
-            dw, dh = iw * scale, target_h
-            on_dark = (text_color == "#FFFFFF")
-            # The ARA mark is dark-on-transparent, so on a dark brand
-            # colour we drop it on a small white tile so it stays
-            # legible. On a light brand colour we draw it directly.
-            x = MARGIN
-            y = PAGE_H - MARGIN - dh
-            if on_dark:
-                pad_x = 10
-                pad_y = 8
-                c.setFillColor(white)
-                c.rect(x - pad_x, y - pad_y, dw + 2 * pad_x, dh + 2 * pad_y,
-                       fill=1, stroke=0)
-            c.drawImage(img, x, y, dw, dh, mask="auto")
-            logo_bottom_y = y - (8 if on_dark else 0)
-        except Exception as e:
-            print(f"  ! could not render cover consultancy logo: {e}", file=sys.stderr)
-
-    # Year sits directly below the consultancy logo.
-    c.setFillColor(HexColor(text_color))
-    year_y = (logo_bottom_y - 22) if logo_bottom_y else (PAGE_H - MARGIN - 22)
-    c.setFont(BODY_FONT, 14)
-    c.drawString(MARGIN, year_y, str(year))
 
     # The brand's own logo is the centrepiece of the cover — sits in
     # the upper half of the left panel, above the brand name. Drawn
@@ -308,6 +283,42 @@ def cover_page(
     c.drawString(MARGIN, PAGE_H / 2 - 30, brand_name)
     c.setFont(BODY_FONT, 22)
     c.drawString(MARGIN, PAGE_H / 2 - 66, "Brand Guidelines")
+
+    # ── Bottom-left mark: ARA consultancy logo + date ──
+    # ARA is dark-on-transparent, so we mount it on a small dark
+    # tile so it sits cleanly on either light or dark brand colours
+    # (matches the "black background variant" we use on internal pages).
+    consultancy_data = _get_cached_logo(consultancy_logo_url) if consultancy_logo_url else None
+    ara_text_baseline_y = MARGIN
+    if consultancy_data:
+        try:
+            img = ImageReader(io.BytesIO(consultancy_data))
+            iw, ih = img.getSize()
+            target_h = 28
+            scale = target_h / ih
+            dw, dh = iw * scale, target_h
+            pad_x = 10
+            pad_y = 7
+            tile_x = MARGIN
+            tile_y = MARGIN
+            # Dark tile so the dark-on-transparent ARA mark is legible
+            # regardless of the brand colour behind the cover.
+            c.setFillColor(HexColor("#111111"))
+            c.rect(tile_x, tile_y, dw + 2 * pad_x, dh + 2 * pad_y, fill=1, stroke=0)
+            c.drawImage(img, tile_x + pad_x, tile_y + pad_y, dw, dh, mask="auto")
+            ara_text_baseline_y = tile_y + pad_y + dh / 2 - 4
+            date_x = tile_x + (dw + 2 * pad_x) + 16
+        except Exception as e:
+            print(f"  ! could not render cover consultancy logo: {e}", file=sys.stderr)
+            date_x = MARGIN
+    else:
+        date_x = MARGIN
+
+    # Date as "Month Year" sits to the right of the ARA mark.
+    date_text = date_str or date.today().strftime("%B %Y")
+    c.setFillColor(HexColor(text_color))
+    c.setFont(BODY_FONT, 12)
+    c.drawString(date_x, ara_text_baseline_y, date_text)
 
     # Homepage screenshot panel, right side. PIL crop to the panel
     # aspect ratio so we fill the rectangle without distortion (a plain
@@ -341,14 +352,25 @@ def cover_page(
                     panel_x, panel_y, panel_w, panel_h,
                     mask="auto",
                 )
+
+            # Brand-colour accent rule at the panel boundary so the
+            # screenshot reads as a distinct surface, not a print bleed.
+            # A 6pt vertical strip of the brand colour, with a thin
+            # darker pinstripe along its screenshot edge for crispness.
+            rule_w = 6
+            c.setFillColor(HexColor(bg))
+            c.rect(panel_x - rule_w, 0, rule_w, PAGE_H, fill=1, stroke=0)
+            try:
+                c.setFillColor(HexColor(_mix_with_black_hex(bg, 0.28)))
+                c.rect(panel_x - 1, 0, 1, PAGE_H, fill=1, stroke=0)
+            except Exception:
+                pass
         except Exception as e:
             print(
                 f"  ! could not render cover screenshot {screenshot_path}: {e}",
                 file=sys.stderr,
             )
 
-    # No bottom-right consultancy logo on the cover — it sits in the
-    # top-left now. Internal pages still carry it in the footer.
     c.showPage()
 
 
@@ -962,8 +984,11 @@ def personas_page(
     page_num: int,
     primary_color: str = "#111111",
 ) -> int:
-    """Audience personas — card grid (2 per row, max 4). Skipped if no
-    personas are present."""
+    """Audience personas — card grid (2 per row, max 4). Each card
+    clips its content to its own bounds so text never spills outside
+    the box. If we run out of vertical room, the remaining bullets
+    are dropped silently rather than rendered over the next persona
+    or the footer."""
     personas = (voice or {}).get("personas") or []
     if not personas:
         return page_num
@@ -980,56 +1005,98 @@ def personas_page(
     cols = 2
     col_gap = GUTTER
     col_w = (PAGE_W - 2 * MARGIN - col_gap) / cols
-    row_pitch = 200
+
+    # Size cards to fit the page exactly — y goes to the title bottom,
+    # MARGIN + footer_band reserves space for the page footer.
+    footer_band = 40
+    row_count = (min(len(personas), 4) + cols - 1) // cols
+    if row_count < 1:
+        row_count = 1
+    total_available = y - MARGIN - footer_band
+    inter_row_gap = 14
+    card_h = (total_available - inter_row_gap * (row_count - 1)) / row_count
+    card_h = max(140.0, card_h)  # safety floor
+
+    HEADER_BAR_H = 24
+    INNER_PAD_X = 12
+    INNER_PAD_Y = 12
+    LINE_GAP = 11
 
     for i, p in enumerate(personas[:4]):
         row = i // cols
         col = i % cols
         x = MARGIN + col * (col_w + col_gap)
-        cy = y - row * row_pitch
-        if cy - row_pitch + 20 < MARGIN + 30:
+        # cy = top of this card
+        cy_top = y - row * (card_h + inter_row_gap)
+        cy_bot = cy_top - card_h
+        if cy_bot < MARGIN + footer_band - 4:
             break
-        # Panel
+
+        # Card frame
         c.setStrokeColor(HexColor("#E0E0E0"))
         c.setLineWidth(0.5)
-        c.rect(x, cy - row_pitch + 20, col_w, row_pitch - 20, fill=0, stroke=1)
-        # Header bar
+        c.rect(x, cy_bot, col_w, card_h, fill=0, stroke=1)
+
+        # Brand-coloured header bar with persona name
         c.setFillColor(accent)
-        c.rect(x, cy - 24, col_w, 24, fill=1, stroke=0)
+        c.rect(x, cy_top - HEADER_BAR_H, col_w, HEADER_BAR_H, fill=1, stroke=0)
         c.setFillColor(HexColor(contrasting_text(primary_color)))
         c.setFont(HEADER_FONT, 12)
-        c.drawString(x + 12, cy - 17, (p.get("name") or "Persona").upper())
+        c.drawString(x + INNER_PAD_X, cy_top - 16, (p.get("name") or "Persona").upper())
 
-        inner_x = x + 12
-        inner_w = col_w - 24
-        ty = cy - 40
-        c.setFillColor(HexColor("#1A1A1A"))
-        c.setFont(BODY_FONT, 10)
-        for line in wrap_text(p.get("summary") or "", BODY_FONT, 10, inner_w)[:3]:
-            c.drawString(inner_x, ty, line)
-            ty -= 13
-        ty -= 6
+        # Inner content area, clipped to the card.
+        inner_x = x + INNER_PAD_X
+        inner_w = col_w - 2 * INNER_PAD_X
+        ty = cy_top - HEADER_BAR_H - INNER_PAD_Y
+        y_floor = cy_bot + INNER_PAD_Y
 
-        def list_section(label: str, items: list, color: HexColor, max_items: int) -> float:
+        def draw_lines(lines: list[str], font: str, size: float, fill_hex: str, line_h: float) -> None:
             nonlocal ty
-            if not items:
-                return ty
-            c.setFillColor(color)
+            c.setFillColor(HexColor(fill_hex))
+            c.setFont(font, size)
+            for line in lines:
+                if ty < y_floor:
+                    return
+                c.drawString(inner_x, ty, line)
+                ty -= line_h
+
+        # Persona summary — max 2 lines so the lists below get room.
+        summary_lines = wrap_text(p.get("summary") or "", BODY_FONT, 10, inner_w)[:2]
+        draw_lines(summary_lines, BODY_FONT, 10, "#1A1A1A", 12)
+        ty -= 4
+        if ty < y_floor:
+            continue
+
+        def list_section(label: str, items: list, color_hex: str, max_items: int) -> None:
+            nonlocal ty
+            if not items or ty < y_floor + 14:
+                return
+            c.setFillColor(HexColor(color_hex))
             c.setFont(HEADER_FONT, 8)
             c.drawString(inner_x, ty, label)
-            ty -= 12
+            ty -= 11
             c.setFillColor(HexColor("#333333"))
             c.setFont(BODY_FONT, 9)
             for it in items[:max_items]:
-                for j, line in enumerate(wrap_text("· " + str(it), BODY_FONT, 9, inner_w)[:2]):
-                    c.drawString(inner_x, ty, line)
-                    ty -= 11
-            ty -= 4
-            return ty
+                if ty < y_floor:
+                    return
+                # Single line per bullet — truncate with an ellipsis
+                # rather than wrapping (wrapping is what was making
+                # cards overflow into the next row).
+                text = "· " + str(it)
+                # Trim until it fits
+                from reportlab.pdfbase.pdfmetrics import stringWidth
+                while stringWidth(text, BODY_FONT, 9) > inner_w and len(text) > 4:
+                    text = text[:-1]
+                if stringWidth(text + "…", BODY_FONT, 9) <= inner_w and text != "· " + str(it):
+                    text += "…"
+                c.drawString(inner_x, ty, text)
+                ty -= LINE_GAP
+            ty -= 3
 
-        list_section("NEEDS",       p.get("needs") or [],       HexColor("#0E7490"), 3)
-        list_section("OBJECTIONS",  p.get("objections") or [],  HexColor("#B45309"), 2)
-        list_section("VOICE CUES",  p.get("voice_cues") or [],  HexColor("#15803D"), 2)
+        list_section("NEEDS",      p.get("needs") or [],      "#0E7490", 3)
+        list_section("OBJECTIONS", p.get("objections") or [], "#B45309", 2)
+        list_section("VOICE CUES", p.get("voice_cues") or [], "#15803D", 2)
 
     c.showPage()
     return page_num + 1
