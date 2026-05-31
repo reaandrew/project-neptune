@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import re
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -2015,6 +2016,28 @@ def _pick_dos_donts_photo(marketing: list[dict]) -> dict | None:
     return None
 
 
+# Responsive-variant suffixes WordPress (and similar CMSes) add to the
+# same source image: e.g. building-300x200.jpg, building-768x512.jpg,
+# building-scaled.jpg and building.jpg are all the same picture.
+# Without canonicalisation each appears as a separate marketing-imagery
+# entry and the photography grid renders the same shot N times.
+_RESPONSIVE_SUFFIX_RE = re.compile(
+    r"-(?:\d+x\d+|scaled|medium|large|small|thumbnail|thumb)"
+    r"(?=\.(?:jpe?g|png|webp|gif|avif|svg)(?:[?#]|$))",
+    re.IGNORECASE,
+)
+
+
+def _canonical_image_url(url: str) -> str:
+    """Return a canonical form of `url` so different responsive
+    variants of the same source image map to the same string. Drops
+    query strings and fragments too."""
+    if not url:
+        return url
+    base = url.split("?", 1)[0].split("#", 1)[0]
+    return _RESPONSIVE_SUFFIX_RE.sub("", base).lower()
+
+
 def photography_page(
     c: canvas.Canvas,
     brand_name: str,
@@ -2040,18 +2063,24 @@ def photography_page(
 
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    # Dedupe by URL and drop anything the caller has reserved for
-    # another section. marketing_imagery is mostly clean already but
-    # responsive variants / re-encodes occasionally produce the same
-    # picture under different URLs.
-    excluded = exclude_urls or set()
-    seen_urls: set[str] = set()
+    # Dedupe by *canonical* URL — WordPress and similar CMSes ship
+    # the same image under multiple responsive variants
+    # (building-300x200.jpg, building-768x512.jpg, building-scaled.jpg
+    # and building.jpg are one shot, not four). Without this the
+    # photography grid shows the same picture two or three times.
+    # Also drop anything the caller has reserved for another section
+    # (the do/don't anchor).
+    excluded_canon = { _canonical_image_url(u) for u in (exclude_urls or set()) }
+    seen_canon: set[str] = set()
     deduped: list[dict] = []
     for it in marketing:
         url = it.get("url")
-        if not url or url in seen_urls or url in excluded:
+        if not url:
             continue
-        seen_urls.add(url)
+        canon = _canonical_image_url(url)
+        if canon in seen_canon or canon in excluded_canon:
+            continue
+        seen_canon.add(canon)
         deduped.append(it)
 
     # Sort: lifestyle/product/context first (most useful for ads), then
