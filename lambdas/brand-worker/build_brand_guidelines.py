@@ -2005,12 +2005,23 @@ def consultancy_credits_page(
     return page_num + 1
 
 
+def _pick_dos_donts_photo(marketing: list[dict]) -> dict | None:
+    """Single 'DO' photo that anchors photography_dos_donts_page.
+    Extracted as a helper so photography_page can exclude it from its
+    grid and we don't render the same hero twice in the book."""
+    for m in marketing or []:
+        if m.get("url"):
+            return m
+    return None
+
+
 def photography_page(
     c: canvas.Canvas,
     brand_name: str,
     images: dict,
     page_num: int,
     primary_color: str = "#111111",
+    exclude_urls: set[str] | None = None,
 ) -> int:
     """Render the brand's marketing imagery across as many slides as
     needed — one centred row of up to 3 large images per slide, each
@@ -2019,12 +2030,29 @@ def photography_page(
     Cells are sized to fill the available vertical budget so the
     photos read large; we just add more slides rather than shrinking.
     Returns the next page number. If no marketing imagery was
-    classified, returns page_num unchanged."""
+    classified, returns page_num unchanged.
+
+    `exclude_urls` lets the caller hide photos that appear elsewhere
+    in the book (currently the do/don't anchor)."""
     marketing = (images or {}).get("marketing_imagery") or []
     if not marketing:
         return page_num
 
     from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    # Dedupe by URL and drop anything the caller has reserved for
+    # another section. marketing_imagery is mostly clean already but
+    # responsive variants / re-encodes occasionally produce the same
+    # picture under different URLs.
+    excluded = exclude_urls or set()
+    seen_urls: set[str] = set()
+    deduped: list[dict] = []
+    for it in marketing:
+        url = it.get("url")
+        if not url or url in seen_urls or url in excluded:
+            continue
+        seen_urls.add(url)
+        deduped.append(it)
 
     # Sort: lifestyle/product/context first (most useful for ads), then
     # team/testimonial/etc. Cap at 12 photos = max 4 photography slides
@@ -2034,9 +2062,11 @@ def photography_page(
         "team": 3, "testimonial": 4, "decorative": 5, "other": 6,
     }
     items = sorted(
-        marketing,
+        deduped,
         key=lambda it: category_order.get(it.get("category") or "other", 9),
     )[:12]
+    if not items:
+        return page_num
 
     cols = 3
     cell_w = (PAGE_W - 2 * MARGIN - GUTTER * (cols - 1)) / cols
@@ -2844,9 +2874,19 @@ def main() -> None:
     next_page = logos_pages(c, brand_name, images, start_url, start_page=next_page,
                              primary_color=brand.get("primary_color") or "#111111")
     next_page = supporting_marks_page(c, brand_name, images, page_num=next_page)
+    # Pre-pick the do/don't anchor so the main photography grid can
+    # exclude it. Without this the same hero photo shows on both the
+    # photography page and the do/don't page.
+    dos_donts_pick = _pick_dos_donts_photo(
+        (images or {}).get("marketing_imagery") or []
+    )
+    exclude_set: set[str] = (
+        {dos_donts_pick["url"]} if dos_donts_pick and dos_donts_pick.get("url") else set()
+    )
     next_page = photography_page(
         c, brand_name, images, page_num=next_page,
         primary_color=brand.get("primary_color") or "#111111",
+        exclude_urls=exclude_set,
     )
     next_page = photography_dos_donts_page(
         c, brand_name, images, style.get("design_dna") or {},
