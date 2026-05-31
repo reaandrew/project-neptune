@@ -624,6 +624,110 @@ Rules:
 """
 
 
+VOICE_PROMPT = """You are a senior brand strategist. From the website
+content + identity below, extract the brand's voice + messaging system
+exactly as a top studio would document it for the brand's marketing
+team. Everything you return should be grounded in the source text —
+do not invent values or personas that aren't supported by what the
+brand actually says about itself.
+
+DOMAIN: {domain}
+
+EXTRACTED IDENTITY:
+{context_json}
+
+PAGE TITLES (full site):
+{titles}
+
+PARAGRAPH SAMPLE (representative copy):
+{paragraphs}
+
+Return STRICT JSON with EXACTLY this shape, no markdown:
+
+{{
+  "tone_of_voice": {{
+    "summary": "1-2 sentences capturing how the brand sounds in its own copy",
+    "examples": [
+      {{
+        "context": "Short label — e.g. 'service description'",
+        "say": "An on-brand phrasing the brand would actually use",
+        "dont_say": "A typical off-brand phrasing to avoid"
+      }}
+    ]
+  }},
+  "voice_spectrum": {{
+    "formal_casual": <integer 1-5; 1 = very formal, 5 = very casual>,
+    "serious_playful": <integer 1-5>,
+    "premium_accessible": <integer 1-5>,
+    "technical_plainspoken": <integer 1-5>,
+    "notes": "1 sentence on the overall positioning"
+  }},
+  "messaging": {{
+    "pitch_10": "A ~10-word elevator pitch in the brand's voice.",
+    "pitch_30": "A ~30-word elevator pitch.",
+    "pitch_60": "A ~60-word elevator pitch.",
+    "pitch_150": "A ~150-word boilerplate paragraph — what would go in a press release.",
+    "tagline_candidates": ["3-5 candidate taglines, each ≤6 words"]
+  }},
+  "personas": [
+    {{
+      "name": "Short label — e.g. 'Sceptical Homeowner'",
+      "summary": "1-2 sentences describing this archetype",
+      "needs": ["2-4 things they want from the brand"],
+      "objections": ["2-3 things that would stop them buying"],
+      "voice_cues": ["2-3 phrasings that resonate with this persona"]
+    }}
+  ],
+  "vocabulary": {{
+    "preferred": ["6-10 words/phrases the brand uses repeatedly that should anchor any new copy"],
+    "avoid": ["6-10 words/phrases the brand should NOT use — industry jargon, dated terms, generic filler ('synergy', 'cutting-edge', 'world-class', 'solutions')"],
+    "notes": "1 sentence on why these choices"
+  }}
+}}
+
+Rules:
+- Provide 3-5 tone_of_voice examples covering different contexts (service description, value statement, call-to-action, trust message).
+- Provide 2-4 personas. Anchor each to evidence in the source text (e.g. if the site mentions 'business owners' and 'individuals', those are two personas, not invented ones).
+- voice_spectrum integers MUST be 1-5. Do not return strings or decimals.
+- vocabulary.preferred must be SPECIFIC to the brand — extract phrases the source text actually repeats. Do not invent.
+- vocabulary.avoid must be SPECIFIC industry-cliché words a senior copywriter would flag.
+"""
+
+
+def extract_voice_and_messaging(
+    *,
+    domain: str,
+    brand_context: dict,
+    page_titles: list[str],
+    paragraphs: list[str],
+    model_id: str | None = None,
+    region: str | None = None,
+    max_tokens: int = 4000,
+) -> dict[str, Any]:
+    """Extract Tier-1 brand-book content: tone of voice, voice spectrum,
+    messaging framework, personas, and vocabulary. One Bedrock call;
+    output is stored under content.voice in the brand YAML."""
+    model_id, region = _resolve_model_and_region(model_id, region)
+    titles_text = "\n".join(f"- {t}" for t in (page_titles or [])[:80])
+    paragraphs_text = "\n\n".join((paragraphs or [])[:30])
+    content: list[dict[str, Any]] = [{
+        "type": "text",
+        "text": VOICE_PROMPT.format(
+            domain=domain,
+            context_json=json.dumps(brand_context, indent=2, ensure_ascii=False),
+            titles=titles_text or "(none)",
+            paragraphs=paragraphs_text or "(none)",
+        ),
+    }]
+    return _invoke(
+        content=content,
+        model_id=model_id,
+        region=region,
+        max_tokens=max_tokens,
+        label="voice-messaging",
+    )
+
+
 def classify_design_dna(
     screenshot_paths: list[str],
     *,

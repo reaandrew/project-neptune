@@ -725,6 +725,635 @@ def design_dna_page(
     return next_page + 1
 
 
+def voice_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    voice: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Tone-of-voice page: a 1-2 sentence summary at the top, then 3-5
+    do/don't pairs in a two-column layout. Returns next page number;
+    returns page_num unchanged when no voice data is available."""
+    tone = (voice or {}).get("tone_of_voice") or {}
+    examples = tone.get("examples") or []
+    if not tone.get("summary") and not examples:
+        return page_num
+
+    draw_page_chrome(c, "Voice", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Tone of voice",
+        "How the brand sounds on the page. Use the say / don't-say pairs below as a quick gut-check for any new copy.",
+        PAGE_H - MARGIN - 30,
+    )
+    accent = HexColor(primary_color)
+
+    if tone.get("summary"):
+        c.setFillColor(black)
+        c.setFont(BODY_FONT, 12)
+        for line in wrap_text(tone["summary"], BODY_FONT, 12, PAGE_W - 2 * MARGIN)[:3]:
+            c.drawString(MARGIN, y, line)
+            y -= 16
+        y -= 12
+
+    if examples:
+        col_w = (PAGE_W - 2 * MARGIN - GUTTER) / 2
+        row_h = 96
+        for i, ex in enumerate(examples[:6]):
+            row = i // 2
+            col = i % 2
+            x = MARGIN + col * (col_w + GUTTER)
+            cy = y - row * (row_h + 14)
+            if cy - row_h < MARGIN + 40:
+                break
+            context_label = (ex.get("context") or "").strip()
+            say = (ex.get("say") or "").strip()
+            dont = (ex.get("dont_say") or "").strip()
+            # Context tag
+            c.setFillColor(accent)
+            c.rect(x, cy - 14, 4, 14, fill=1, stroke=0)
+            c.setFillColor(HexColor("#666666"))
+            c.setFont(HEADER_FONT, 8)
+            c.drawString(x + 10, cy - 11, context_label.upper())
+            # Say
+            c.setFillColor(HexColor("#1A1A1A"))
+            c.setFont(HEADER_FONT, 9)
+            c.drawString(x, cy - 28, "✓ SAY")
+            c.setFillColor(HexColor("#333333"))
+            c.setFont(BODY_FONT, 10)
+            for j, line in enumerate(wrap_text(say, BODY_FONT, 10, col_w)[:2]):
+                c.drawString(x, cy - 42 - j * 12, line)
+            # Don't say
+            c.setFillColor(HexColor("#B91C1C"))
+            c.setFont(HEADER_FONT, 9)
+            c.drawString(x, cy - 70, "× DON'T SAY")
+            c.setFillColor(HexColor("#7A7A7A"))
+            c.setFont(BODY_FONT, 10)
+            for j, line in enumerate(wrap_text(dont, BODY_FONT, 10, col_w)[:2]):
+                c.drawString(x, cy - 84 - j * 12, line)
+
+    c.showPage()
+    return page_num + 1
+
+
+def voice_spectrum_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    voice: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Voice spectrum: four 1-5 sliders (formal↔casual, serious↔playful,
+    premium↔accessible, technical↔plainspoken). Skipped silently if
+    the spectrum is missing."""
+    spectrum = (voice or {}).get("voice_spectrum") or {}
+    rows = [
+        ("Formal",     "Casual",        spectrum.get("formal_casual")),
+        ("Serious",    "Playful",       spectrum.get("serious_playful")),
+        ("Premium",    "Accessible",    spectrum.get("premium_accessible")),
+        ("Technical",  "Plainspoken",   spectrum.get("technical_plainspoken")),
+    ]
+    if not any(v is not None for _, _, v in rows):
+        return page_num
+
+    draw_page_chrome(c, "Voice", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Voice spectrum",
+        "Where the brand sits on four register dimensions. Use these to keep new copy in tune.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    accent = HexColor(primary_color)
+    track_x = MARGIN + 130
+    track_w = PAGE_W - MARGIN - track_x - 130
+    notch_count = 5
+    notch_gap = track_w / (notch_count - 1)
+
+    for left, right, val in rows:
+        if val is None:
+            continue
+        try:
+            v = max(1, min(5, int(val)))
+        except (TypeError, ValueError):
+            continue
+        # Left label
+        c.setFillColor(HexColor("#1A1A1A"))
+        c.setFont(HEADER_FONT, 11)
+        c.drawRightString(track_x - 12, y - 4, left)
+        # Right label
+        c.drawString(track_x + track_w + 12, y - 4, right)
+        # Track
+        c.setStrokeColor(HexColor("#D1D1D1"))
+        c.setLineWidth(1)
+        c.line(track_x, y, track_x + track_w, y)
+        # Notches
+        c.setFillColor(HexColor("#D1D1D1"))
+        for i in range(notch_count):
+            nx = track_x + i * notch_gap
+            c.circle(nx, y, 3, fill=1, stroke=0)
+        # Active marker
+        ax = track_x + (v - 1) * notch_gap
+        c.setFillColor(accent)
+        c.circle(ax, y, 8, fill=1, stroke=0)
+        c.setFillColor(HexColor(contrasting_text(primary_color)))
+        c.setFont(HEADER_FONT, 9)
+        c.drawCentredString(ax, y - 3, str(v))
+        y -= 56
+
+    notes = spectrum.get("notes")
+    if notes:
+        y -= 10
+        c.setFillColor(HexColor("#666666"))
+        c.setFont(BODY_FONT, 11)
+        for line in wrap_text(notes, BODY_FONT, 11, PAGE_W - 2 * MARGIN)[:3]:
+            c.drawString(MARGIN, y, line)
+            y -= 16
+
+    c.showPage()
+    return page_num + 1
+
+
+def messaging_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    voice: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Messaging framework: 10 / 30 / 60 / 150-word elevator pitches +
+    tagline candidates. Skipped if all empty."""
+    msg = (voice or {}).get("messaging") or {}
+    pitches = [
+        ("10 WORDS",   msg.get("pitch_10")),
+        ("30 WORDS",   msg.get("pitch_30")),
+        ("60 WORDS",   msg.get("pitch_60")),
+        ("150 WORDS",  msg.get("pitch_150")),
+    ]
+    taglines = msg.get("tagline_candidates") or []
+    if not any(text for _, text in pitches) and not taglines:
+        return page_num
+
+    draw_page_chrome(c, "Messaging", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Messaging framework",
+        "The brand at four sentence lengths — use whichever fits the moment.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    accent = HexColor(primary_color)
+    text_w = PAGE_W - 2 * MARGIN - 90
+    label_x = MARGIN
+
+    for label, text in pitches:
+        if not text:
+            continue
+        # Word-count pill
+        c.setFillColor(accent)
+        c.rect(label_x, y - 14, 84, 18, fill=1, stroke=0)
+        c.setFillColor(HexColor(contrasting_text(primary_color)))
+        c.setFont(HEADER_FONT, 9)
+        c.drawString(label_x + 8, y - 10, label)
+        # Pitch text
+        c.setFillColor(HexColor("#1A1A1A"))
+        c.setFont(BODY_FONT, 11)
+        wrapped = wrap_text(text, BODY_FONT, 11, text_w)[:6]
+        for i, line in enumerate(wrapped):
+            c.drawString(label_x + 100, y - 8 - i * 14, line)
+        y -= max(28, len(wrapped) * 14 + 14)
+        if y < MARGIN + 120:
+            break
+
+    if taglines and y > MARGIN + 90:
+        y -= 8
+        c.setFillColor(HexColor("#666666"))
+        c.setFont(HEADER_FONT, 9)
+        c.drawString(MARGIN, y, "TAGLINE CANDIDATES")
+        y -= 18
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        x = MARGIN
+        for tag in taglines[:5]:
+            w = stringWidth(tag, HEADER_FONT, 12) + 18
+            if x + w > PAGE_W - MARGIN:
+                y -= 28
+                x = MARGIN
+                if y < MARGIN + 40:
+                    break
+            c.setFillColor(HexColor("#F4F4F4"))
+            c.setStrokeColor(HexColor("#D1D1D1"))
+            c.setLineWidth(0.5)
+            c.roundRect(x, y - 18, w, 24, 4, fill=1, stroke=1)
+            c.setFillColor(HexColor("#1A1A1A"))
+            c.setFont(HEADER_FONT, 12)
+            c.drawString(x + 9, y - 12, tag)
+            x += w + 8
+
+    c.showPage()
+    return page_num + 1
+
+
+def personas_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    voice: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Audience personas — card grid (2 per row, max 4). Skipped if no
+    personas are present."""
+    personas = (voice or {}).get("personas") or []
+    if not personas:
+        return page_num
+
+    draw_page_chrome(c, "Audience", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Audience personas",
+        "Who the brand actually talks to. Use these to choose voice + angle when writing new copy.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    accent = HexColor(primary_color)
+    cols = 2
+    col_gap = GUTTER
+    col_w = (PAGE_W - 2 * MARGIN - col_gap) / cols
+    row_pitch = 200
+
+    for i, p in enumerate(personas[:4]):
+        row = i // cols
+        col = i % cols
+        x = MARGIN + col * (col_w + col_gap)
+        cy = y - row * row_pitch
+        if cy - row_pitch + 20 < MARGIN + 30:
+            break
+        # Panel
+        c.setStrokeColor(HexColor("#E0E0E0"))
+        c.setLineWidth(0.5)
+        c.rect(x, cy - row_pitch + 20, col_w, row_pitch - 20, fill=0, stroke=1)
+        # Header bar
+        c.setFillColor(accent)
+        c.rect(x, cy - 24, col_w, 24, fill=1, stroke=0)
+        c.setFillColor(HexColor(contrasting_text(primary_color)))
+        c.setFont(HEADER_FONT, 12)
+        c.drawString(x + 12, cy - 17, (p.get("name") or "Persona").upper())
+
+        inner_x = x + 12
+        inner_w = col_w - 24
+        ty = cy - 40
+        c.setFillColor(HexColor("#1A1A1A"))
+        c.setFont(BODY_FONT, 10)
+        for line in wrap_text(p.get("summary") or "", BODY_FONT, 10, inner_w)[:3]:
+            c.drawString(inner_x, ty, line)
+            ty -= 13
+        ty -= 6
+
+        def list_section(label: str, items: list, color: HexColor, max_items: int) -> float:
+            nonlocal ty
+            if not items:
+                return ty
+            c.setFillColor(color)
+            c.setFont(HEADER_FONT, 8)
+            c.drawString(inner_x, ty, label)
+            ty -= 12
+            c.setFillColor(HexColor("#333333"))
+            c.setFont(BODY_FONT, 9)
+            for it in items[:max_items]:
+                for j, line in enumerate(wrap_text("· " + str(it), BODY_FONT, 9, inner_w)[:2]):
+                    c.drawString(inner_x, ty, line)
+                    ty -= 11
+            ty -= 4
+            return ty
+
+        list_section("NEEDS",       p.get("needs") or [],       HexColor("#0E7490"), 3)
+        list_section("OBJECTIONS",  p.get("objections") or [],  HexColor("#B45309"), 2)
+        list_section("VOICE CUES",  p.get("voice_cues") or [],  HexColor("#15803D"), 2)
+
+    c.showPage()
+    return page_num + 1
+
+
+def vocabulary_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    voice: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Vocabulary: two columns of pills — preferred (green border) +
+    avoid (red border). Skipped if empty."""
+    vocab = (voice or {}).get("vocabulary") or {}
+    preferred = vocab.get("preferred") or []
+    avoid = vocab.get("avoid") or []
+    if not preferred and not avoid:
+        return page_num
+
+    draw_page_chrome(c, "Voice", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Vocabulary",
+        "Words the brand uses · words to avoid. Use this as a quick filter when drafting copy.",
+        PAGE_H - MARGIN - 30,
+    )
+    notes = vocab.get("notes")
+    if notes:
+        c.setFillColor(HexColor("#666666"))
+        c.setFont(BODY_FONT, 11)
+        for line in wrap_text(notes, BODY_FONT, 11, PAGE_W - 2 * MARGIN)[:2]:
+            c.drawString(MARGIN, y, line)
+            y -= 14
+        y -= 8
+
+    col_gap = GUTTER + 20
+    col_w = (PAGE_W - 2 * MARGIN - col_gap) / 2
+    left_x = MARGIN
+    right_x = MARGIN + col_w + col_gap
+
+    def column(x: float, label: str, items: list, color_hex: str) -> None:
+        c.setFillColor(HexColor(color_hex))
+        c.setFont(HEADER_FONT, 11)
+        c.drawString(x, y, label)
+        c.setStrokeColor(HexColor(color_hex))
+        c.setLineWidth(1.5)
+        c.line(x, y - 6, x + 40, y - 6)
+
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        cy = y - 26
+        cx = x
+        c.setFont(BODY_FONT, 10)
+        for word in items[:14]:
+            w = stringWidth(word, BODY_FONT, 10) + 16
+            if cx + w > x + col_w:
+                cy -= 26
+                cx = x
+                if cy < MARGIN + 30:
+                    break
+            c.setFillColor(HexColor("#FAFAFA"))
+            c.setStrokeColor(HexColor(color_hex))
+            c.setLineWidth(0.6)
+            c.roundRect(cx, cy - 16, w, 20, 4, fill=1, stroke=1)
+            c.setFillColor(HexColor("#1A1A1A"))
+            c.drawString(cx + 8, cy - 11, word)
+            cx += w + 6
+
+    column(left_x,  "PREFERRED", preferred, "#15803D")
+    column(right_x, "AVOID",     avoid,     "#B91C1C")
+
+    c.showPage()
+    return page_num + 1
+
+
+def photography_dos_donts_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    images: dict,
+    design_dna: dict,
+    page_num: int,
+    primary_color: str = "#111111",
+) -> int:
+    """Photography dos/don'ts: the top suitable_for_ads photo from the
+    brand's marketing imagery on the left, the design_dna.do_not bullets
+    on the right. Skipped if either source is empty."""
+    marketing = (images or {}).get("marketing_imagery") or []
+    donots = (design_dna or {}).get("do_not") or []
+    if not marketing and not donots:
+        return page_num
+
+    draw_page_chrome(c, "Photography", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "Photography do · don't",
+        "Use real photographs that fit the brand's design DNA. Avoid the patterns on the right.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    col_w = (PAGE_W - 2 * MARGIN - GUTTER) / 2
+    left_x = MARGIN
+    right_x = MARGIN + col_w + GUTTER
+
+    # DO panel — biggest suitable photo
+    c.setStrokeColor(HexColor("#15803D"))
+    c.setLineWidth(0.8)
+    image_h = 240
+    c.rect(left_x, y - image_h, col_w, image_h, fill=0, stroke=1)
+    c.setFillColor(HexColor("#15803D"))
+    c.setFont(HEADER_FONT, 11)
+    c.drawString(left_x, y + 6, "✓ DO")
+    pick = next((m for m in marketing if m.get("url")), None)
+    if pick:
+        data = fetch_image(pick.get("url") or "")
+        if data:
+            try:
+                img = ImageReader(io.BytesIO(data))
+                iw, ih = img.getSize()
+                scale = min(col_w / iw, image_h / ih)
+                dw, dh = iw * scale, ih * scale
+                c.drawImage(
+                    img,
+                    left_x + (col_w - dw) / 2,
+                    y - image_h + (image_h - dh) / 2,
+                    dw, dh, mask="auto",
+                )
+            except Exception as e:
+                print(f"  ! could not render do/dont photo: {e}", file=sys.stderr)
+        cap_y = y - image_h - 14
+        c.setFillColor(HexColor("#333333"))
+        c.setFont(BODY_FONT, 9)
+        for line in wrap_text(pick.get("description") or "", BODY_FONT, 9, col_w)[:3]:
+            c.drawString(left_x, cap_y, line)
+            cap_y -= 11
+
+    # DON'T panel — bullet list
+    c.setStrokeColor(HexColor("#B91C1C"))
+    c.setLineWidth(0.8)
+    c.rect(right_x, y - image_h, col_w, image_h, fill=0, stroke=1)
+    c.setFillColor(HexColor("#B91C1C"))
+    c.setFont(HEADER_FONT, 11)
+    c.drawString(right_x, y + 6, "× DON'T")
+    ty = y - 24
+    c.setFillColor(HexColor("#333333"))
+    c.setFont(BODY_FONT, 11)
+    for bullet in donots[:6]:
+        for j, line in enumerate(wrap_text("× " + str(bullet), BODY_FONT, 11, col_w - 24)[:3]):
+            c.drawString(right_x + 14, ty - j * 14, line)
+        ty -= 14 * max(1, min(3, len(wrap_text("× " + str(bullet), BODY_FONT, 11, col_w - 24)))) + 8
+        if ty < y - image_h + 14:
+            break
+
+    c.showPage()
+    return page_num + 1
+
+
+def ui_components_page(
+    c: canvas.Canvas,
+    brand_name: str,
+    brand: dict,
+    typography: dict,
+    page_num: int,
+) -> int:
+    """A 'design system' page: buttons, badges/pills, a card, form
+    inputs, alert states — all rendered in brand colours."""
+    primary = brand.get("primary_color") or "#111111"
+    secondary = brand.get("secondary_color") or "#666666"
+    accent = brand.get("accent_color") or primary
+    text_color = brand.get("text_color") or "#111111"
+    primary_font = typography.get("primary_font") or HEADER_FONT
+    body_font = typography.get("secondary_font") or BODY_FONT
+    # ReportLab can't render arbitrary downloaded fonts; fall back to
+    # built-in faces. Use the brand name as a label only.
+    of_primary = HEADER_FONT
+    of_body = BODY_FONT
+
+    draw_page_chrome(c, "Components", page_num, brand_name)
+    y = draw_section_title(
+        c,
+        "UI components",
+        "Reference treatment for buttons, badges, cards, form fields and alerts in the brand palette.",
+        PAGE_H - MARGIN - 30,
+    )
+
+    accent_col = HexColor(primary)
+    text_on_accent = HexColor(contrasting_text(primary))
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    # ── Buttons row ──
+    c.setFillColor(HexColor("#666666"))
+    c.setFont(of_primary, 9)
+    c.drawString(MARGIN, y, "BUTTONS")
+    by = y - 26
+    bx = MARGIN
+    def button(label: str, fill: str, fg: str, border: str | None = None) -> None:
+        nonlocal bx
+        w = stringWidth(label, of_primary, 12) + 36
+        if fill:
+            c.setFillColor(HexColor(fill))
+            c.rect(bx, by - 22, w, 32, fill=1, stroke=0)
+        if border:
+            c.setStrokeColor(HexColor(border))
+            c.setLineWidth(1)
+            c.rect(bx, by - 22, w, 32, fill=0, stroke=1)
+        c.setFillColor(HexColor(fg))
+        c.setFont(of_primary, 12)
+        c.drawString(bx + 18, by - 13, label)
+        bx += w + 14
+
+    button("Primary action", primary, contrasting_text(primary))
+    button("Secondary", "#FFFFFF", text_color, border="#D1D1D1")
+    button("Accent", accent, contrasting_text(accent))
+
+    y = by - 40
+
+    # ── Pills / badges ──
+    c.setFillColor(HexColor("#666666"))
+    c.setFont(of_primary, 9)
+    c.drawString(MARGIN, y, "BADGES")
+    py = y - 22
+    px = MARGIN
+    def pill(label: str, fill: str, fg: str) -> None:
+        nonlocal px
+        w = stringWidth(label, of_primary, 9) + 18
+        c.setFillColor(HexColor(fill))
+        c.roundRect(px, py - 14, w, 18, 9, fill=1, stroke=0)
+        c.setFillColor(HexColor(fg))
+        c.setFont(of_primary, 9)
+        c.drawString(px + 9, py - 10, label)
+        px += w + 8
+
+    pill("NEW", primary, contrasting_text(primary))
+    pill("FEATURED", secondary, contrasting_text(secondary))
+    pill("LIMITED", accent, contrasting_text(accent))
+    pill("LIVE", "#15803D", "#FFFFFF")
+    pill("DRAFT", "#6B7280", "#FFFFFF")
+    y = py - 36
+
+    # ── Card sample ──
+    c.setFillColor(HexColor("#666666"))
+    c.setFont(of_primary, 9)
+    c.drawString(MARGIN, y, "CARD")
+    cy_top = y - 8
+    card_w = (PAGE_W - 2 * MARGIN - GUTTER) / 2
+    card_h = 110
+    c.setStrokeColor(HexColor("#E0E0E0"))
+    c.setLineWidth(0.5)
+    c.rect(MARGIN, cy_top - card_h, card_w, card_h, fill=0, stroke=1)
+    # Accent strip
+    c.setFillColor(accent_col)
+    c.rect(MARGIN, cy_top - 4, card_w, 4, fill=1, stroke=0)
+    # Title
+    c.setFillColor(HexColor(text_color))
+    c.setFont(of_primary, 14)
+    c.drawString(MARGIN + 14, cy_top - 26, "Card title")
+    c.setFillColor(HexColor("#666666"))
+    c.setFont(of_body, 10)
+    c.drawString(MARGIN + 14, cy_top - 42, "Short supporting line.")
+    # Mini button on the card
+    btn_label = "Action"
+    btn_w = stringWidth(btn_label, of_primary, 10) + 22
+    c.setFillColor(accent_col)
+    c.rect(MARGIN + 14, cy_top - card_h + 16, btn_w, 22, fill=1, stroke=0)
+    c.setFillColor(text_on_accent)
+    c.setFont(of_primary, 10)
+    c.drawString(MARGIN + 25, cy_top - card_h + 22, btn_label)
+
+    # ── Form input sample ──
+    fx = MARGIN + card_w + GUTTER
+    c.setFillColor(HexColor("#666666"))
+    c.setFont(of_primary, 9)
+    c.drawString(fx, y, "FORM")
+    iy = cy_top - 24
+    c.setFillColor(HexColor("#333333"))
+    c.setFont(of_primary, 9)
+    c.drawString(fx, iy, "EMAIL")
+    c.setStrokeColor(HexColor("#D1D1D1"))
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.rect(fx, iy - 30, card_w, 28, fill=1, stroke=1)
+    c.setFillColor(HexColor("#9CA3AF"))
+    c.setFont(of_body, 11)
+    c.drawString(fx + 10, iy - 22, "you@example.com")
+    # Submit
+    iy -= 50
+    c.setFillColor(accent_col)
+    c.rect(fx, iy - 26, 130, 28, fill=1, stroke=0)
+    c.setFillColor(text_on_accent)
+    c.setFont(of_primary, 11)
+    c.drawString(fx + 20, iy - 17, "Subscribe")
+
+    y = cy_top - card_h - 24
+
+    # ── Alerts ──
+    c.setFillColor(HexColor("#666666"))
+    c.setFont(of_primary, 9)
+    c.drawString(MARGIN, y, "ALERTS")
+    ay = y - 24
+    alert_w = (PAGE_W - 2 * MARGIN - GUTTER * 2) / 3
+    alerts = [
+        ("Success",  "Saved.",                "#15803D"),
+        ("Info",     "Heads up — check this.", primary),
+        ("Error",    "Something went wrong.", "#B91C1C"),
+    ]
+    for i, (tag, msg, color) in enumerate(alerts):
+        ax = MARGIN + i * (alert_w + GUTTER)
+        c.setStrokeColor(HexColor(color))
+        c.setLineWidth(0.8)
+        c.rect(ax, ay - 44, alert_w, 44, fill=0, stroke=1)
+        c.setFillColor(HexColor(color))
+        c.rect(ax, ay - 44, 4, 44, fill=1, stroke=0)
+        c.setFillColor(HexColor(color))
+        c.setFont(of_primary, 10)
+        c.drawString(ax + 12, ay - 14, tag.upper())
+        c.setFillColor(HexColor("#1A1A1A"))
+        c.setFont(of_body, 10)
+        for j, line in enumerate(wrap_text(msg, of_body, 10, alert_w - 16)[:2]):
+            c.drawString(ax + 12, ay - 28 - j * 12, line)
+
+    # Silence unused-locals lint — these were captured from the
+    # brand/typography for future use (custom-font swap-in).
+    _ = (primary_font, body_font)
+    c.showPage()
+    return page_num + 1
+
+
 def typography_page(c: canvas.Canvas, brand_name: str, typography: dict, page_num: int) -> None:
     draw_page_chrome(c, "Typography", page_num, brand_name)
     y = draw_section_title(c, "Typography", "Display typeface and type scale.", PAGE_H - MARGIN - 30)
@@ -2080,6 +2709,48 @@ def main() -> None:
         except Exception as e:
             print(f"  ! Bedrock essence pass failed ({e}); no mission/services in PDF.", file=sys.stderr)
 
+        # Pass 4: voice + messaging + personas + vocabulary. Reuses
+        # the same page titles + paragraphs as the essence pass but
+        # asks for a brand-strategist-level output: tone-of-voice
+        # do/don't pairs, voice-spectrum sliders, messaging framework
+        # (10/30/60/150-word pitches + tagline candidates), 2-4
+        # personas, vocabulary preferred/avoid.
+        try:
+            content = data.get("content") or {}
+            page_titles = list((content.get("page_titles") or {}).values())
+            paragraphs_raw = content.get("paragraphs") or []
+            paragraphs = [p.get("text") if isinstance(p, dict) else p for p in paragraphs_raw]
+            paragraphs = [p for p in paragraphs if p]
+            if page_titles or paragraphs:
+                domain = data.get("domain") or urlparse(data.get("start_url") or "").netloc
+                style_so_far = data.get("style") or {}
+                brand_so_far = style_so_far.get("brand") or {}
+                essence_so_far = (data.get("content") or {}).get("essence") or {}
+                ctx_for_voice = {
+                    "brand_name": essence_so_far.get("brand_name"),
+                    "mission_statement": essence_so_far.get("mission_statement"),
+                    "tone_words": brand_so_far.get("tone_words"),
+                    "core_services": essence_so_far.get("core_services"),
+                    "design_archetype": (style_so_far.get("design_dna") or {}).get("archetype"),
+                }
+                voice = bedrock_brand.extract_voice_and_messaging(
+                    domain=domain, brand_context=ctx_for_voice,
+                    page_titles=page_titles, paragraphs=paragraphs,
+                    model_id=args.bedrock_model, region=args.bedrock_region,
+                )
+                personas = voice.get("personas") or []
+                tone = voice.get("tone_of_voice") or {}
+                print(
+                    f"  Bedrock voice: personas={len(personas)} "
+                    f"tone_examples={len(tone.get('examples') or [])} "
+                    f"taglines={len((voice.get('messaging') or {}).get('tagline_candidates') or [])}",
+                    file=sys.stderr,
+                )
+                content_block = data.setdefault("content", {})
+                content_block["voice"] = voice
+        except Exception as e:
+            print(f"  ! Bedrock voice-messaging pass failed ({e}); skipping.", file=sys.stderr)
+
         # Persist enriched YAML if a save target was given
         if args.save_yaml:
             Path(args.save_yaml).write_text(
@@ -2142,12 +2813,44 @@ def main() -> None:
         c, brand_name, style.get("design_dna") or {}, page_num=next_page,
         primary_color=brand.get("primary_color") or "#111111",
     )
+    # Voice + messaging + personas + vocabulary — Tier 1 brand-book
+    # additions. Each renderer falls through silently if its source
+    # data is missing.
+    voice_section = (content.get("voice") or {})
+    next_page = voice_page(
+        c, brand_name, voice_section, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
+    next_page = voice_spectrum_page(
+        c, brand_name, voice_section, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
+    next_page = messaging_page(
+        c, brand_name, voice_section, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
+    next_page = personas_page(
+        c, brand_name, voice_section, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
+    next_page = vocabulary_page(
+        c, brand_name, voice_section, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
+    next_page = ui_components_page(
+        c, brand_name, brand, typography, page_num=next_page,
+    )
     typography_page(c, brand_name, typography, page_num=next_page); next_page += 1
     next_page = logos_pages(c, brand_name, images, start_url, start_page=next_page,
                              primary_color=brand.get("primary_color") or "#111111")
     next_page = supporting_marks_page(c, brand_name, images, page_num=next_page)
     next_page = photography_page(
         c, brand_name, images, page_num=next_page,
+        primary_color=brand.get("primary_color") or "#111111",
+    )
+    next_page = photography_dos_donts_page(
+        c, brand_name, images, style.get("design_dna") or {},
+        page_num=next_page,
         primary_color=brand.get("primary_color") or "#111111",
     )
     favicon_page(c, brand_name, brand, page_num=next_page); next_page += 1

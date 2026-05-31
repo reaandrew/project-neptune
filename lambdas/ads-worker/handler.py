@@ -335,6 +335,24 @@ Your image_prompt must REASON FROM THE DNA. Concrete rules:
 5. The reference_marks are mood anchors. Mention them in the prompt
    as DESIGN INFLUENCES (\"composition influenced by Aesop in-store
    typography\"), never as logos or trademarks to render.
+6. The brand's VOICE block is binding for the headline / body / CTA.
+   - voice.tone_of_voice.examples is a list of {context, say, dont_say}
+     pairs. Treat the dont_say phrasings as banned. The say phrasings
+     are templates to match in register.
+   - voice.voice_spectrum is four sliders (1=left, 5=right) across
+     formal↔casual, serious↔playful, premium↔accessible,
+     technical↔plainspoken. Match the slider positions exactly in the
+     copy register. A 1 on premium↔accessible (premium) must not read
+     as breezy or jokey.
+   - voice.vocabulary.preferred is the brand's own repeated phrases.
+     Re-use at least one preferred word in the headline or body when
+     it fits naturally — these are the brand's own language.
+   - voice.vocabulary.avoid is industry-cliché filler the brand
+     refuses. Never use any of these terms in the headline / body / CTA.
+   - voice.personas is 2-4 audience archetypes. Pick the persona that
+     best matches the OBJECTIVE / ANGLE and write the copy as if you
+     were speaking directly to them. Their voice_cues are exact-phrase
+     templates you can echo.
 """
 
 
@@ -456,6 +474,13 @@ def _brand_summary(brand: dict) -> dict:
     # do-nots. This is what makes the ad stop looking generic.
     design_dna = style.get("design_dna") or {}
 
+    # Voice + messaging + personas + vocabulary — Tier-1 brand-book
+    # content. Carries tone of voice (do/don't pairs), voice spectrum,
+    # messaging framework (10/30/60/150-word pitches), audience
+    # personas (with needs / objections / voice cues), vocabulary
+    # (preferred / avoid). Used by gpt-5 when drafting headline/body/cta.
+    voice = content.get("voice") or {}
+
     return {
         "domain": brand.get("domain"),
         "start_url": brand.get("start_url"),
@@ -479,6 +504,7 @@ def _brand_summary(brand: dict) -> dict:
         # choose from.
         "marketing_imagery": marketing[:12],
         "design_dna": design_dna,
+        "voice": voice,
     }
 
 
