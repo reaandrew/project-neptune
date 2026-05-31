@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=1280, initial-scale=1" />
-  <title>$brand_name — Tailwind</title>
+  <title>$brand_name — Tailwind components</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=$display_font_q:wght@500;700&family=$body_font_q:wght@400;500;600&display=swap" rel="stylesheet" />
   <script>
@@ -11,7 +11,7 @@
       theme: {
         extend: {
           colors: {
-            brand: { DEFAULT: '$primary', soft: '$primary_soft', dim: '$primary_dim' },
+            brand: { DEFAULT: '$primary', soft: '$primary_soft', pale: '$primary_pale', dim: '$primary_dim' },
             accent: '$accent',
             ink:   '$text_color',
           },
@@ -24,108 +24,186 @@
     };
   </script>
   <style>
-    html, body { font-family: '$body_font', system-ui, -apple-system, sans-serif; }
+    html, body { font-family: '$body_font', system-ui, sans-serif; }
     .font-display { font-family: '$display_font', serif; }
+    /* Make focus-states render in screenshots */
+    .show-focus { box-shadow: 0 0 0 3px color-mix(in srgb, $primary 22%, transparent); border-color: $primary !important; }
   </style>
 </head>
-<body class="bg-white text-ink antialiased">
-  <!-- Top nav -->
-  <header class="border-b border-slate-200">
-    <div class="max-w-6xl mx-auto px-8 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        $logo_or_mark
-        <span class="font-display text-xl font-bold tracking-tight">$brand_name</span>
+<body class="bg-white text-ink p-10">
+  <header class="flex items-center justify-between border-b border-slate-200 pb-5 mb-10">
+    <div class="flex items-center gap-3">
+      $logo_or_mark
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Components</div>
+        <div class="font-display text-xl font-bold tracking-tight">$brand_name — Tailwind</div>
       </div>
-      <nav class="hidden md:flex items-center gap-7 text-sm font-medium text-slate-700">
-        <a href="#" class="hover:text-brand">Services</a>
-        <a href="#" class="hover:text-brand">About</a>
-        <a href="#" class="hover:text-brand">Work</a>
-        <a href="#" class="hover:text-brand">Contact</a>
-      </nav>
-      <a href="#" class="inline-flex items-center gap-2 rounded-full bg-brand text-white px-5 py-2.5 text-sm font-semibold shadow-sm hover:bg-brand-dim transition">Get started →</a>
     </div>
+    <span class="inline-flex items-center gap-2 rounded-full bg-brand text-white px-3 py-1 text-[11px] uppercase tracking-widest font-semibold">Brand applied</span>
   </header>
 
-  <!-- Hero -->
-  <section class="max-w-6xl mx-auto px-8 pt-14 pb-12">
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-10 items-center">
-      <div class="md:col-span-3">
-        <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 flex items-center gap-3">
-          <span class="block w-10 h-[2px] bg-brand"></span>
-          Tailwind UI · Brand applied
-        </div>
-        <h1 class="font-display text-5xl md:text-6xl font-bold tracking-tight leading-[1.05]">
-          Built for the<br/><span class="text-brand">way you work.</span>
-        </h1>
-        <p class="mt-6 text-lg text-slate-600 max-w-xl leading-relaxed">
-          A complete component system styled in your brand colours, typography, and tone — ready to drop into any modern web app.
-        </p>
-        <div class="mt-8 flex flex-wrap items-center gap-3">
-          <a href="#" class="inline-flex items-center gap-2 rounded-full bg-brand text-white px-6 py-3 text-sm font-semibold hover:bg-brand-dim transition">Primary action</a>
-          <a href="#" class="inline-flex items-center gap-2 rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition">Secondary</a>
-          <a href="#" class="text-sm font-semibold text-brand hover:underline">Learn more →</a>
-        </div>
-      </div>
-      <div class="md:col-span-2">
-        <div class="rounded-2xl overflow-hidden shadow-xl ring-1 ring-slate-200">
-          <div class="aspect-[4/5] bg-brand-soft grid place-items-center text-white font-display text-7xl font-bold">
-            $brand_initial
+  <div class="grid grid-cols-12 gap-10">
+    <!-- LEFT COLUMN -->
+    <div class="col-span-7 space-y-9">
+
+      <!-- Buttons -->
+      <section>
+        <h3 class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Buttons</h3>
+        <div class="space-y-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <button class="rounded-full bg-brand text-white px-5 py-2.5 text-sm font-semibold hover:bg-brand-dim transition">Primary</button>
+            <button class="rounded-full bg-brand-soft text-brand-dim px-5 py-2.5 text-sm font-semibold transition">Tonal</button>
+            <button class="rounded-full border border-slate-300 text-ink px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition">Secondary</button>
+            <button class="rounded-full text-brand px-5 py-2.5 text-sm font-semibold hover:bg-brand-pale transition">Ghost</button>
+            <button class="rounded-full border border-red-500 text-red-600 px-5 py-2.5 text-sm font-semibold hover:bg-red-50 transition">Destructive</button>
+            <button disabled class="rounded-full bg-slate-200 text-slate-500 px-5 py-2.5 text-sm font-semibold cursor-not-allowed">Disabled</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <button class="rounded-full bg-brand text-white px-7 py-3.5 text-base font-semibold">Large</button>
+            <button class="rounded-full bg-brand text-white px-5 py-2.5 text-sm font-semibold">Default</button>
+            <button class="rounded-full bg-brand text-white px-3 py-1.5 text-xs font-semibold">Small</button>
+            <button class="rounded-full bg-brand text-white w-10 h-10 grid place-items-center text-base font-semibold" aria-label="add">+</button>
+            <button class="rounded-full bg-brand text-white px-5 py-2.5 text-sm font-semibold inline-flex items-center gap-2">
+              <span>Continue</span><span>→</span>
+            </button>
           </div>
         </div>
-      </div>
-    </div>
-  </section>
+      </section>
 
-  <!-- Feature cards -->
-  <section class="max-w-6xl mx-auto px-8 pb-14">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-      $feature_cards_tailwind
-    </div>
-  </section>
+      <!-- Form controls -->
+      <section>
+        <h3 class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Form controls</h3>
+        <div class="grid grid-cols-2 gap-4">
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Name</span>
+            <input type="text" placeholder="Your name" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none" />
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Email (focused)</span>
+            <input type="email" value="you@example.com" class="show-focus mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none" />
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Project (error)</span>
+            <input type="text" value="" class="mt-1.5 w-full rounded-lg border-2 border-red-500 bg-red-50 px-3.5 py-2.5 text-sm focus:outline-none" />
+            <span class="block mt-1 text-xs text-red-600">Required field.</span>
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Plan</span>
+            <select class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none">
+              <option>Starter</option><option>Pro</option><option>Enterprise</option>
+            </select>
+          </label>
+        </div>
+        <div class="mt-5 flex flex-wrap items-center gap-6 text-sm">
+          <label class="inline-flex items-center gap-2">
+            <span class="w-4 h-4 rounded border-2 border-brand bg-brand grid place-items-center text-white text-[10px] font-bold">✓</span>
+            <span>Checkbox · checked</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <span class="w-4 h-4 rounded border-2 border-slate-300 bg-white"></span>
+            <span>Checkbox · default</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <span class="w-4 h-4 rounded-full border-2 border-brand grid place-items-center"><span class="w-2 h-2 rounded-full bg-brand"></span></span>
+            <span>Radio · selected</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <span class="relative inline-block w-9 h-5 rounded-full bg-brand"><span class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-white shadow"></span></span>
+            <span>Toggle · on</span>
+          </label>
+        </div>
+      </section>
 
-  <!-- Form + alerts -->
-  <section class="max-w-6xl mx-auto px-8 pb-16 grid grid-cols-1 md:grid-cols-5 gap-10">
-    <form class="md:col-span-3 rounded-2xl bg-slate-50 border border-slate-200 p-8">
-      <div class="font-display text-2xl font-bold tracking-tight">Join the mailing list</div>
-      <p class="mt-1 text-sm text-slate-600">One email a month. No spam, ever.</p>
-      <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <label class="block">
-          <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Name</span>
-          <input type="text" placeholder="Your name" class="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none" />
-        </label>
-        <label class="block">
-          <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Email</span>
-          <input type="email" placeholder="you@example.com" class="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none" />
-        </label>
-      </div>
-      <button type="submit" class="mt-6 inline-flex items-center gap-2 rounded-full bg-brand text-white px-6 py-3 text-sm font-semibold hover:bg-brand-dim transition">Subscribe →</button>
-    </form>
-    <div class="md:col-span-2 space-y-3">
-      <div class="rounded-lg border-l-4 border-green-500 bg-green-50 p-4">
-        <div class="font-semibold text-green-900 text-sm">Saved</div>
-        <div class="text-sm text-green-800">Your changes have been published.</div>
-      </div>
-      <div class="rounded-lg border-l-4 p-4" style="border-color: $primary; background: $primary_pale;">
-        <div class="font-semibold text-sm" style="color: $primary_text_on_pale;">Heads up</div>
-        <div class="text-sm" style="color: $primary_text_on_pale;">Your trial ends in 7 days.</div>
-      </div>
-      <div class="rounded-lg border-l-4 border-rose-500 bg-rose-50 p-4">
-        <div class="font-semibold text-rose-900 text-sm">Something went wrong</div>
-        <div class="text-sm text-rose-800">Please try again in a moment.</div>
-      </div>
-    </div>
-  </section>
+      <!-- Cards -->
+      <section>
+        <h3 class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Cards</h3>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Basic</div>
+            <div class="font-display text-lg font-bold mt-1">Card title</div>
+            <p class="text-xs text-slate-600 mt-1.5">Short supporting line.</p>
+          </div>
+          <div class="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+            <div class="aspect-[16/9] bg-brand-soft grid place-items-center text-white font-display text-3xl font-bold">$brand_initial</div>
+            <div class="p-4">
+              <div class="font-display text-lg font-bold">With media</div>
+              <p class="text-xs text-slate-600 mt-1.5">Hero panel above.</p>
+            </div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+            <div class="font-display text-lg font-bold">With action</div>
+            <p class="text-xs text-slate-600 mt-1.5 flex-1">Card footer carries the CTA.</p>
+            <button class="mt-3 rounded-full bg-brand text-white px-4 py-1.5 text-xs font-semibold self-start">Open</button>
+          </div>
+        </div>
+      </section>
 
-  <!-- Footer / badges -->
-  <footer class="border-t border-slate-200">
-    <div class="max-w-6xl mx-auto px-8 py-6 flex items-center justify-between flex-wrap gap-4">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">v2.0</span>
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">Beta</span>
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">All systems go</span>
-      </div>
-      <div class="text-xs text-slate-500">© $year $brand_name · Tailwind treatment</div>
     </div>
-  </footer>
+
+    <!-- RIGHT COLUMN -->
+    <div class="col-span-5 space-y-9">
+
+      <!-- Badges -->
+      <section>
+        <h3 class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Badges &amp; pills</h3>
+        <div class="flex flex-wrap gap-2">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-brand text-white px-3 py-1 text-xs font-semibold">Solid</span>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-soft text-brand-dim px-3 py-1 text-xs font-semibold">Tonal</span>
+          <span class="inline-flex items-center gap-1.5 rounded-full border border-brand text-brand px-3 py-1 text-xs font-semibold">Outline</span>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-700 px-3 py-1 text-xs font-medium">Neutral</span>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 text-green-800 px-3 py-1 text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-green-600"></span>Success
+          </span>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-900 px-3 py-1 text-xs font-medium">Warning</span>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-rose-100 text-rose-900 px-3 py-1 text-xs font-medium">Error</span>
+        </div>
+      </section>
+
+      <!-- Alerts -->
+      <section>
+        <h3 class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Alerts</h3>
+        <div class="space-y-2">
+          <div class="rounded-lg border-l-4 border-green-500 bg-green-50 p-3">
+            <div class="font-semibold text-green-900 text-sm">Saved successfully</div>
+            <div class="text-xs text-green-800">Your changes have been published.</div>
+          </div>
+          <div class="rounded-lg border-l-4 p-3" style="border-color: $primary; background: $primary_pale;">
+            <div class="font-semibold text-sm" style="color: $primary_text_on_pale;">Heads up</div>
+            <div class="text-xs" style="color: $primary_text_on_pale;">Your trial ends in 7 days.</div>
+          </div>
+          <div class="rounded-lg border-l-4 border-amber-500 bg-amber-50 p-3">
+            <div class="font-semibold text-amber-900 text-sm">Action required</div>
+            <div class="text-xs text-amber-800">Verify your email to continue.</div>
+          </div>
+          <div class="rounded-lg border-l-4 border-rose-500 bg-rose-50 p-3">
+            <div class="font-semibold text-rose-900 text-sm">Something went wrong</div>
+            <div class="text-xs text-rose-800">Please try again in a moment.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Avatars + progress -->
+      <section>
+        <h3 class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Avatars &amp; progress</h3>
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-brand text-white grid place-items-center font-bold">${brand_initial}A</div>
+          <div class="w-10 h-10 rounded-full bg-brand-soft text-brand-dim grid place-items-center font-bold">JD</div>
+          <div class="w-10 h-10 rounded-full bg-slate-200 text-slate-700 grid place-items-center font-bold">SK</div>
+          <div class="flex -space-x-2">
+            <div class="w-8 h-8 rounded-full bg-brand text-white grid place-items-center text-xs font-bold ring-2 ring-white">A</div>
+            <div class="w-8 h-8 rounded-full bg-brand-soft text-brand-dim grid place-items-center text-xs font-bold ring-2 ring-white">B</div>
+            <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 grid place-items-center text-xs font-bold ring-2 ring-white">+4</div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs text-slate-600 mb-1"><span>Progress</span><span>72%</span></div>
+          <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+            <div class="h-full bg-brand rounded-full" style="width: 72%;"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
 </body>
 </html>
