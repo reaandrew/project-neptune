@@ -9,8 +9,10 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -21,6 +23,40 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
+
+// normaliseURL collapses cosmetic differences (case, www prefix, query
+// string) so two registrations of the same brand land in the same
+// dedup bucket. Mirrors the rule used in brand-jobs-create so the
+// dashboard view matches what the URL cache treats as equivalent.
+func normaliseURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Host)
+	host = strings.TrimPrefix(host, "www.")
+	path := u.Path
+	if path == "" {
+		path = "/"
+	}
+	return scheme + "://" + host + path
+}
+
+// statusRank ranks job statuses so we can prefer "done" over
+// "running"/"pending" when picking the canonical entry per URL.
+func statusRank(s string) int {
+	switch s {
+	case "done":
+		return 3
+	case "running":
+		return 2
+	case "pending":
+		return 1
+	default:
+		return 0
+	}
+}
 
 type jobSummary struct {
 	JobID         string `json:"jobId"`
@@ -91,7 +127,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	input := &dynamodb.ScanInput{
 		TableName: aws.String(jobsTable),
 		ProjectionExpression: aws.String(
-			"job_id, #u, #s, created_at, subject, brand_name, primary_color, logo_url, screenshot_key",
+			"job_id, #u, #s, created_at, subject, brand_name, primary_color, logo_url, screenshot_key, url_normalised",
 		),
 		ExpressionAttributeNames: map[string]string{
 			"#u": "url",
@@ -129,6 +165,49 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 			LogoURL:      sval(it, "logo_url"),
 		})
 	}
+
+	// Deduplicate by normalised URL — one card per brand, not one card
+	// per scan. Without this, every Regenerate click leaves a stale
+	// row visible in the dashboard. Prefer status=done, then most
+	// recent createdAt.
+	urlNormalisedByJobID := map[string]string{}
+	for _, it := range items {
+		jobID := sval(it, "job_id")
+		nu := sval(it, "url_normalised")
+		if nu == "" {
+			// Backfill old rows that predate the url_normalised
+			// field — normalise on the fly.
+			nu = normaliseURL(sval(it, "url"))
+		}
+		urlNormalisedByJobID[jobID] = nu
+	}
+	bestByURL := map[string]int{}  // url_normalised → index into jobs
+	for i, j := range jobs {
+		nu := urlNormalisedByJobID[j.JobID]
+		if nu == "" {
+			// Fall back to the raw jobId so we don't accidentally
+			// collapse multiple URL-less rows into one bucket.
+			nu = "__no-url__" + j.JobID
+		}
+		current, ok := bestByURL[nu]
+		if !ok {
+			bestByURL[nu] = i
+			continue
+		}
+		// Prefer higher status rank; break ties by most recent.
+		curRank := statusRank(jobs[current].Status)
+		newRank := statusRank(j.Status)
+		if newRank > curRank ||
+			(newRank == curRank && j.CreatedAt > jobs[current].CreatedAt) {
+			bestByURL[nu] = i
+		}
+	}
+	deduped := make([]jobSummary, 0, len(bestByURL))
+	for _, idx := range bestByURL {
+		deduped = append(deduped, jobs[idx])
+	}
+	jobs = deduped
+
 	sort.Slice(jobs, func(i, j int) bool {
 		return jobs[i].CreatedAt > jobs[j].CreatedAt
 	})
