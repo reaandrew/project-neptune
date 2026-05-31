@@ -242,106 +242,125 @@ def cover_page(
     consultancy_logo_url: str | None = DEFAULT_CONSULTANCY_LOGO_URL,
     date_str: str | None = None,
 ) -> None:
+    """Scalable horizontal-stack cover:
+
+      ┌────────────────────────────────────────┐
+      │  BRAND COLOUR PANEL                     │
+      │                                         │
+      │        [BRAND LOGO centred]             │
+      │                                         │
+      │        BRAND NAME (big display)         │
+      │           Brand Guidelines              │
+      │                                         │
+      ├────────────────────────────────────────┤  ← brand-colour rule
+      │                                         │
+      │  [HOMEPAGE SCREENSHOT — full width]     │
+      │                                         │
+      ├────────────────────────────────────────┤
+      │ ▌ARA ▌ May 2026                         │  ← dark mark band
+      └────────────────────────────────────────┘
+
+    Key constraints honoured:
+      - The logo always gets the FULL page width minus margins, so wide
+        horizontal lockups (e.g. shield-mark + 'Highfield Qualifications')
+        never get clipped by a side-panel.
+      - The logo is NEVER upscaled beyond MAX_LOGO_UPSCALE — keeps small
+        source PNGs from pixelating into the cover.
+      - The brand-name typesize auto-shrinks to fit the page width, so
+        long brand names ('Andrew Rea Associates Consulting Group') stay
+        on one line at a smaller size rather than overflowing.
+      - The screenshot is a landscape strip, matching the homepage's
+        natural aspect ratio better than the previous vertical panel.
+    """
     bg = brand_color or "#000000"
-    c.setFillColor(HexColor(bg))
-    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
     text_color = contrasting_text(bg)
 
-    # Reserve a panel on the right side for the homepage screenshot, if
-    # available. The text column on the left shrinks accordingly.
     have_screenshot = bool(screenshot_path and Path(screenshot_path).exists())
-    panel_w = PAGE_W * 0.45 if have_screenshot else 0
-    text_w = PAGE_W - 2 * MARGIN - panel_w
 
-    # The brand's own logo is the centrepiece of the cover — sits in
-    # the upper half of the left panel, above the brand name. Drawn
-    # directly on the brand colour; for typical web logos this is the
-    # mode they were designed for.
+    # Vertical zoning (ReportLab y starts at 0 = bottom).
+    band_h = 36 if have_screenshot else 0
+    strip_h = PAGE_H * 0.32 if have_screenshot else 0
+    brand_y0 = band_h + strip_h
+    brand_h = PAGE_H - brand_y0
+
+    # Solid brand-colour fill behind the brand panel.
+    c.setFillColor(HexColor(bg))
+    c.rect(0, brand_y0, PAGE_W, brand_h, fill=1, stroke=0)
+
+    # ── Logo, centred near the top of the brand panel ─────────────
+    MAX_LOGO_UPSCALE = 1.8  # never blow up the source image past this
+    logo_block_top = PAGE_H - 40   # leave a small breath from the page top
+    logo_block_bot = brand_y0 + brand_h * 0.50  # leave room for brand name
+    logo_box_h = logo_block_top - logo_block_bot
+    logo_box_w = PAGE_W - 2 * MARGIN
+    logo_drawn_bottom = logo_block_top  # fallback if no logo
+
     if logo_url:
         brand_data = fetch_image(logo_url)
         if brand_data:
             try:
                 img = ImageReader(io.BytesIO(brand_data))
                 iw, ih = img.getSize()
-                max_w = min(300, text_w * 0.85)
-                max_h = 120
-                scale = min(max_w / iw, max_h / ih)
+                # Scale to fit AND obey the upscale ceiling.
+                scale = min(logo_box_w / iw, logo_box_h / ih, MAX_LOGO_UPSCALE)
                 dw, dh = iw * scale, ih * scale
-                # Place so the logo sits comfortably above the brand
-                # name (whose top edge is around PAGE_H / 2 + 30 for
-                # the 56pt title).
-                logo_y = PAGE_H / 2 + 60
-                c.drawImage(img, MARGIN, logo_y, dw, dh, mask="auto")
+                lx = (PAGE_W - dw) / 2
+                # Vertically centre inside the logo box.
+                ly = logo_block_bot + (logo_box_h - dh) / 2
+                c.drawImage(img, lx, ly, dw, dh, mask="auto")
+                logo_drawn_bottom = ly
             except Exception as e:
                 print(f"  ! could not render cover brand logo {logo_url}: {e}", file=sys.stderr)
 
-    # Brand name + subtitle, centred vertically on the left panel.
-    # Shrink slightly when a screenshot is squeezing the text column.
+    # ── Brand name + subtitle, centred under the logo ─────────────
     c.setFillColor(HexColor(text_color))
-    name_size = 56 if have_screenshot else 64
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    available_w = PAGE_W - 2 * MARGIN
+    name_size = 72
+    while name_size > 28 and stringWidth(brand_name, HEADER_FONT, name_size) > available_w:
+        name_size -= 2
+    sub_size = 22
+    sub_w = stringWidth("Brand Guidelines", BODY_FONT, sub_size)
+    while sub_size > 12 and sub_w > available_w:
+        sub_size -= 1
+        sub_w = stringWidth("Brand Guidelines", BODY_FONT, sub_size)
+
+    # Position the two text rows so they sit centred between the
+    # logo's bottom edge and the brand panel's bottom edge.
+    name_top_gap = 24
+    name_y = max(brand_y0 + brand_h * 0.18, logo_drawn_bottom - name_top_gap - name_size * 0.8)
     c.setFont(HEADER_FONT, name_size)
-    c.drawString(MARGIN, PAGE_H / 2 - 30, brand_name)
-    c.setFont(BODY_FONT, 22)
-    c.drawString(MARGIN, PAGE_H / 2 - 66, "Brand Guidelines")
+    c.drawCentredString(PAGE_W / 2, name_y, brand_name)
 
-    # ── Bottom-left mark: ARA consultancy logo + date ──
-    # ARA is dark-on-transparent, so we mount it on a small dark
-    # tile so it sits cleanly on either light or dark brand colours
-    # (matches the "black background variant" we use on internal pages).
-    consultancy_data = _get_cached_logo(consultancy_logo_url) if consultancy_logo_url else None
-    ara_text_baseline_y = MARGIN
-    if consultancy_data:
+    c.setFont(BODY_FONT, sub_size)
+    c.drawCentredString(PAGE_W / 2, name_y - (name_size * 0.55), "Brand Guidelines")
+
+    # ── Brand-colour accent rule between brand panel and screenshot ─
+    if have_screenshot:
         try:
-            img = ImageReader(io.BytesIO(consultancy_data))
-            iw, ih = img.getSize()
-            target_h = 28
-            scale = target_h / ih
-            dw, dh = iw * scale, target_h
-            pad_x = 10
-            pad_y = 7
-            tile_x = MARGIN
-            tile_y = MARGIN
-            # Dark tile so the dark-on-transparent ARA mark is legible
-            # regardless of the brand colour behind the cover.
-            c.setFillColor(HexColor("#111111"))
-            c.rect(tile_x, tile_y, dw + 2 * pad_x, dh + 2 * pad_y, fill=1, stroke=0)
-            c.drawImage(img, tile_x + pad_x, tile_y + pad_y, dw, dh, mask="auto")
-            ara_text_baseline_y = tile_y + pad_y + dh / 2 - 4
-            date_x = tile_x + (dw + 2 * pad_x) + 16
-        except Exception as e:
-            print(f"  ! could not render cover consultancy logo: {e}", file=sys.stderr)
-            date_x = MARGIN
-    else:
-        date_x = MARGIN
+            darker = _mix_with_black_hex(bg, 0.28)
+            c.setFillColor(HexColor(darker))
+        except Exception:
+            c.setFillColor(HexColor(bg))
+        rule_h = 3
+        c.rect(0, brand_y0 - rule_h, PAGE_W, rule_h, fill=1, stroke=0)
 
-    # Date as "Month Year" sits to the right of the ARA mark.
-    date_text = date_str or date.today().strftime("%B %Y")
-    c.setFillColor(HexColor(text_color))
-    c.setFont(BODY_FONT, 12)
-    c.drawString(date_x, ara_text_baseline_y, date_text)
-
-    # Homepage screenshot panel, right side. PIL crop to the panel
-    # aspect ratio so we fill the rectangle without distortion (a plain
-    # drawImage would either letterbox or stretch).
+    # ── Homepage screenshot — full-width landscape strip ──────────
     if have_screenshot:
         try:
             from PIL import Image
-            panel_x = PAGE_W - panel_w
-            panel_y = 0
-            panel_h = PAGE_H
-            target_ratio = panel_w / panel_h
+            target_ratio = PAGE_W / strip_h
             with Image.open(screenshot_path) as im:
                 im = im.convert("RGB")
                 iw, ih = im.size
                 src_ratio = iw / ih
                 if src_ratio > target_ratio:
-                    # Source wider than panel — crop sides, keep centre.
+                    # Source wider than strip — crop sides, keep centre.
                     new_w = int(ih * target_ratio)
                     left = (iw - new_w) // 2
                     im = im.crop((left, 0, left + new_w, ih))
                 else:
-                    # Source taller than panel — crop bottom, keep top
-                    # (above-the-fold is the most representative part).
+                    # Source taller than strip — crop bottom, keep top.
                     new_h = int(iw / target_ratio)
                     im = im.crop((0, 0, iw, new_h))
                 buf = io.BytesIO()
@@ -349,27 +368,61 @@ def cover_page(
                 buf.seek(0)
                 c.drawImage(
                     ImageReader(buf),
-                    panel_x, panel_y, panel_w, panel_h,
+                    0, band_h, PAGE_W, strip_h,
                     mask="auto",
                 )
-
-            # Brand-colour accent rule at the panel boundary so the
-            # screenshot reads as a distinct surface, not a print bleed.
-            # A 6pt vertical strip of the brand colour, with a thin
-            # darker pinstripe along its screenshot edge for crispness.
-            rule_w = 6
-            c.setFillColor(HexColor(bg))
-            c.rect(panel_x - rule_w, 0, rule_w, PAGE_H, fill=1, stroke=0)
-            try:
-                c.setFillColor(HexColor(_mix_with_black_hex(bg, 0.28)))
-                c.rect(panel_x - 1, 0, 1, PAGE_H, fill=1, stroke=0)
-            except Exception:
-                pass
         except Exception as e:
             print(
                 f"  ! could not render cover screenshot {screenshot_path}: {e}",
                 file=sys.stderr,
             )
+
+    # ── Bottom band: dark strip with ARA mark + date ──────────────
+    if have_screenshot:
+        c.setFillColor(HexColor("#0F1115"))
+        c.rect(0, 0, PAGE_W, band_h, fill=1, stroke=0)
+
+    consultancy_data = _get_cached_logo(consultancy_logo_url) if consultancy_logo_url else None
+    date_text = date_str or date.today().strftime("%B %Y")
+    # Use white-on-dark when the band is dark; brand text colour
+    # otherwise (when the cover is one panel).
+    bottom_text_color = "#FFFFFF" if have_screenshot else text_color
+
+    date_x = MARGIN
+    text_y = MARGIN if not have_screenshot else (band_h / 2 - 4)
+
+    if consultancy_data:
+        try:
+            img = ImageReader(io.BytesIO(consultancy_data))
+            iw, ih = img.getSize()
+            target_h = 18 if have_screenshot else 28
+            scale = target_h / ih
+            dw, dh = iw * scale, target_h
+            pad_x = 8 if have_screenshot else 10
+            pad_y = 5 if have_screenshot else 7
+            tile_x = MARGIN
+            # Centre vertically inside the dark band (or just above the
+            # margin when there's no band).
+            tile_y = (band_h - (dh + 2 * pad_y)) / 2 if have_screenshot else MARGIN
+            # On the dark band the ARA mark is already on a dark
+            # background; only draw a tile when the cover is a single
+            # brand-colour panel.
+            if not have_screenshot:
+                c.setFillColor(HexColor("#111111"))
+                c.rect(tile_x, tile_y, dw + 2 * pad_x, dh + 2 * pad_y, fill=1, stroke=0)
+                c.drawImage(img, tile_x + pad_x, tile_y + pad_y, dw, dh, mask="auto")
+                text_y = tile_y + pad_y + dh / 2 - 4
+                date_x = tile_x + (dw + 2 * pad_x) + 16
+            else:
+                c.drawImage(img, tile_x, tile_y + pad_y, dw, dh, mask="auto")
+                text_y = tile_y + pad_y + dh / 2 - 4
+                date_x = tile_x + dw + 16
+        except Exception as e:
+            print(f"  ! could not render cover consultancy logo: {e}", file=sys.stderr)
+
+    c.setFillColor(HexColor(bottom_text_color))
+    c.setFont(BODY_FONT, 11 if have_screenshot else 12)
+    c.drawString(date_x, text_y, date_text)
 
     c.showPage()
 
