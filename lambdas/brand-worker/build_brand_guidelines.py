@@ -287,36 +287,75 @@ def cover_page(
     c.setFillColor(HexColor(bg))
     c.rect(0, brand_y0, PAGE_W, brand_h, fill=1, stroke=0)
 
-    # ── Logo, centred near the top of the brand panel ─────────────
-    MAX_LOGO_UPSCALE = 1.8  # never blow up the source image past this
-    logo_block_top = PAGE_H - 40   # leave a small breath from the page top
-    logo_block_bot = brand_y0 + brand_h * 0.50  # leave room for brand name
-    logo_box_h = logo_block_top - logo_block_bot
-    logo_box_w = PAGE_W - 2 * MARGIN
-    logo_drawn_bottom = logo_block_top  # fallback if no logo
-
+    # ── Resolve the logo and pick a rendering mode ────────────────
+    # We try to fetch the logo up front so we can read its native
+    # pixel size and decide whether to:
+    #   (a) render it BIG as the cover centrepiece (logo-centric), or
+    #   (b) render it small at native size as a brand mark above the
+    #       brand name, which becomes the centrepiece (typographic).
+    # Mode (b) is what saves brands like Highfield whose entire web
+    # asset is a 167×43 PNG — upscaling that to cover size pixelates.
+    TYPOGRAPHIC_THRESHOLD_PX = 80
+    brand_img = None
+    logo_iw = logo_ih = 0
     if logo_url:
         brand_data = fetch_image(logo_url)
         if brand_data:
             try:
-                img = ImageReader(io.BytesIO(brand_data))
-                iw, ih = img.getSize()
-                # Scale to fit AND obey the upscale ceiling.
-                scale = min(logo_box_w / iw, logo_box_h / ih, MAX_LOGO_UPSCALE)
-                dw, dh = iw * scale, ih * scale
-                lx = (PAGE_W - dw) / 2
-                # Vertically centre inside the logo box.
-                ly = logo_block_bot + (logo_box_h - dh) / 2
-                c.drawImage(img, lx, ly, dw, dh, mask="auto")
-                logo_drawn_bottom = ly
+                brand_img = ImageReader(io.BytesIO(brand_data))
+                logo_iw, logo_ih = brand_img.getSize()
             except Exception as e:
-                print(f"  ! could not render cover brand logo {logo_url}: {e}", file=sys.stderr)
+                print(f"  ! could not decode cover brand logo {logo_url}: {e}", file=sys.stderr)
+                brand_img = None
+
+    typographic = (brand_img is None) or (logo_ih < TYPOGRAPHIC_THRESHOLD_PX)
+
+    if typographic:
+        # Small native-size mark; brand name does the heavy lifting.
+        max_logo_upscale = 1.0
+        logo_target_h = 50          # ceiling — render smaller if source is
+        name_size_start = 96
+        logo_top = PAGE_H - 60
+        logo_bot = brand_y0 + brand_h * 0.70
+    else:
+        # Logo is the centrepiece, brand name underneath.
+        max_logo_upscale = 1.8
+        logo_target_h = brand_h * 0.30
+        name_size_start = 72
+        logo_top = PAGE_H - 40
+        logo_bot = brand_y0 + brand_h * 0.50
+
+    logo_box_h = logo_top - logo_bot
+    logo_box_w = PAGE_W - 2 * MARGIN
+    logo_drawn_bottom = logo_top  # fallback if no logo to draw
+
+    if brand_img is not None:
+        try:
+            scale = min(
+                logo_box_w / logo_iw,
+                logo_target_h / logo_ih,
+                max_logo_upscale,
+            )
+            dw, dh = logo_iw * scale, logo_ih * scale
+            lx = (PAGE_W - dw) / 2
+            # In typographic mode we anchor the mark near the TOP of
+            # the logo box so the gap below it feels intentional and
+            # leads the eye down to the brand name. In logo-centric
+            # mode we centre the logo within its (larger) box.
+            if typographic:
+                ly = logo_top - dh - 4
+            else:
+                ly = logo_bot + (logo_box_h - dh) / 2
+            c.drawImage(brand_img, lx, ly, dw, dh, mask="auto")
+            logo_drawn_bottom = ly
+        except Exception as e:
+            print(f"  ! could not render cover brand logo {logo_url}: {e}", file=sys.stderr)
 
     # ── Brand name + subtitle, centred under the logo ─────────────
     c.setFillColor(HexColor(text_color))
     from reportlab.pdfbase.pdfmetrics import stringWidth
     available_w = PAGE_W - 2 * MARGIN
-    name_size = 72
+    name_size = name_size_start
     while name_size > 28 and stringWidth(brand_name, HEADER_FONT, name_size) > available_w:
         name_size -= 2
     sub_size = 22
@@ -325,10 +364,17 @@ def cover_page(
         sub_size -= 1
         sub_w = stringWidth("Brand Guidelines", BODY_FONT, sub_size)
 
-    # Position the two text rows so they sit centred between the
-    # logo's bottom edge and the brand panel's bottom edge.
-    name_top_gap = 24
-    name_y = max(brand_y0 + brand_h * 0.18, logo_drawn_bottom - name_top_gap - name_size * 0.8)
+    # Position the two text rows. In typographic mode the brand name
+    # sits near the optical centre of the brand panel; in logo-centric
+    # mode it sits just below the logo.
+    if typographic:
+        name_y = brand_y0 + brand_h * 0.42
+    else:
+        name_top_gap = 24
+        name_y = max(
+            brand_y0 + brand_h * 0.18,
+            logo_drawn_bottom - name_top_gap - name_size * 0.8,
+        )
     c.setFont(HEADER_FONT, name_size)
     c.drawCentredString(PAGE_W / 2, name_y, brand_name)
 
